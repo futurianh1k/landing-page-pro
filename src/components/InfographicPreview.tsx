@@ -14,6 +14,7 @@ interface InfographicPreviewProps {
     stage_order: number;
   }>;
   createdAt: string;
+  generatedContent?: string;
 }
 
 const STAGE_ICONS = [
@@ -30,10 +31,25 @@ export const InfographicPreview = ({
   description, 
   aiModel, 
   stages,
-  createdAt 
+  createdAt,
+  generatedContent 
 }: InfographicPreviewProps) => {
   const completedStages = stages.filter(s => s.status === 'completed').length;
   const progressPercentage = stages.length > 0 ? (completedStages / stages.length) * 100 : 0;
+
+  // Parse generated content into sections
+  const parseSections = (content?: string) => {
+    if (!content) return [];
+    const sections = content.split(/\n#{1,2}\s+/).filter(Boolean);
+    return sections.map((section, index) => {
+      const lines = section.split('\n').filter(line => line.trim());
+      const sectionTitle = lines[0]?.replace(/^#+\s*/, '') || `섹션 ${index + 1}`;
+      const sectionContent = lines.slice(1).join('\n');
+      return { title: sectionTitle, content: sectionContent };
+    });
+  };
+
+  const sections = parseSections(generatedContent);
 
   return (
     <div className="space-y-6">
@@ -78,31 +94,47 @@ export const InfographicPreview = ({
         </CardContent>
       </Card>
 
-      {/* 프로세스 플로우 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" />
-            프로세스 플로우
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="relative">
-            {/* 연결선 */}
-            <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary via-accent to-success" />
-            
-            {/* 단계들 */}
+      {/* 최종 결과물 요약 보고서 */}
+      {generatedContent ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5" />
+              최종 결과물 요약
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             <div className="space-y-6">
+              {sections.map((section, index) => (
+                <div key={index} className="border-l-4 border-primary/30 pl-6 py-2">
+                  <h3 className="text-xl font-bold mb-3 text-primary">{section.title}</h3>
+                  <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                    {section.content}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              프로세스 진행 상황
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
               {stages.map((stage, index) => {
                 const Icon = STAGE_ICONS[index] || FileText;
                 const isCompleted = stage.status === 'completed';
                 const isProcessing = stage.status === 'processing';
                 
                 return (
-                  <div key={stage.id} className="relative pl-20">
-                    {/* 아이콘 */}
+                  <div key={stage.id} className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg">
                     <div 
-                      className={`absolute left-0 w-16 h-16 rounded-full flex items-center justify-center border-4 border-background ${
+                      className={`w-12 h-12 rounded-full flex items-center justify-center ${
                         isCompleted 
                           ? 'bg-success' 
                           : isProcessing 
@@ -110,52 +142,38 @@ export const InfographicPreview = ({
                           : 'bg-muted'
                       }`}
                     >
-                      <Icon className={`w-7 h-7 ${
+                      <Icon className={`w-6 h-6 ${
                         isCompleted || isProcessing ? 'text-white' : 'text-muted-foreground'
                       }`} />
                     </div>
-                    
-                    {/* 콘텐츠 */}
-                    <Card className={`${
-                      isProcessing ? 'border-primary shadow-lg' : ''
-                    }`}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <h3 className="font-bold text-lg">
-                              {stage.stage_order}. {stage.stage_name}
-                            </h3>
-                          </div>
-                          <Badge 
-                            variant={
-                              isCompleted ? 'default' : 
-                              isProcessing ? 'secondary' : 
-                              'outline'
-                            }
-                            className={
-                              isCompleted ? 'bg-success' : 
-                              isProcessing ? 'bg-primary' : 
-                              ''
-                            }
-                          >
-                            {isCompleted ? '완료' : isProcessing ? '처리 중' : '대기'}
-                          </Badge>
-                        </div>
-                        
-                        {stage.content && (
-                          <p className="text-sm text-muted-foreground line-clamp-3">
-                            {stage.content}
-                          </p>
-                        )}
-                      </CardContent>
-                    </Card>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold">
+                          {stage.stage_order}. {stage.stage_name}
+                        </h3>
+                        <Badge 
+                          variant={
+                            isCompleted ? 'default' : 
+                            isProcessing ? 'secondary' : 
+                            'outline'
+                          }
+                          className={
+                            isCompleted ? 'bg-success' : 
+                            isProcessing ? 'bg-primary' : 
+                            ''
+                          }
+                        >
+                          {isCompleted ? '완료' : isProcessing ? '처리 중' : '대기'}
+                        </Badge>
+                      </div>
+                    </div>
                   </div>
                 );
               })}
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 타임라인 */}
       <Card className="bg-muted/30">

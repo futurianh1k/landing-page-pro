@@ -654,6 +654,7 @@ const ProjectDetail = () => {
               aiModel={project.ai_model}
               stages={stages}
               createdAt={project.created_at}
+              generatedContent={project.generated_content || undefined}
             />
           </TabsContent>
 
