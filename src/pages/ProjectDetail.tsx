@@ -10,8 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, CheckCircle2, Clock, XCircle, Loader2, RefreshCw, FileText, List, Download, Copy, Share2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, XCircle, Loader2, RefreshCw, FileText, List, Download, Copy, Share2, BarChart3 } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
+import { InfographicPreview } from "@/components/InfographicPreview";
+import jsPDF from 'jspdf';
+import PptxGenJS from 'pptxgenjs';
 
 type Project = Tables<"projects">;
 type ProjectStage = Tables<"project_stages">;
@@ -307,6 +310,159 @@ const ProjectDetail = () => {
     }
   };
 
+  const handleDownloadPDF = () => {
+    if (!project?.generated_content) return;
+    
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      const maxWidth = pageWidth - (margin * 2);
+      
+      // 제목
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.text(project.title, margin, margin);
+      
+      let yPos = margin + 15;
+      
+      // 설명
+      if (project.description) {
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'normal');
+        const descLines = doc.splitTextToSize(project.description, maxWidth);
+        doc.text(descLines, margin, yPos);
+        yPos += descLines.length * 7 + 10;
+      }
+      
+      // 구분선
+      doc.setDrawColor(200, 200, 200);
+      doc.line(margin, yPos, pageWidth - margin, yPos);
+      yPos += 10;
+      
+      // 콘텐츠
+      doc.setFontSize(11);
+      const contentLines = doc.splitTextToSize(project.generated_content, maxWidth);
+      
+      contentLines.forEach((line: string) => {
+        if (yPos > pageHeight - margin) {
+          doc.addPage();
+          yPos = margin;
+        }
+        doc.text(line, margin, yPos);
+        yPos += 6;
+      });
+      
+      doc.save(`${project.title.replace(/\s+/g, '_')}.pdf`);
+      
+      toast({
+        title: "PDF 다운로드 완료",
+        description: "PDF 파일이 다운로드되었습니다.",
+      });
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      toast({
+        title: "PDF 생성 실패",
+        description: "PDF 생성 중 오류가 발생했습니다.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDownloadPPT = () => {
+    if (!project?.generated_content) return;
+    
+    try {
+      const pptx = new PptxGenJS();
+      
+      // 제목 슬라이드
+      const titleSlide = pptx.addSlide();
+      titleSlide.background = { color: 'F1F5F9' };
+      
+      titleSlide.addText(project.title, {
+        x: 0.5,
+        y: 1.5,
+        w: 9,
+        h: 1.5,
+        fontSize: 44,
+        bold: true,
+        color: '1e293b',
+        align: 'center',
+      });
+      
+      if (project.description) {
+        titleSlide.addText(project.description, {
+          x: 1,
+          y: 3.5,
+          w: 8,
+          h: 1,
+          fontSize: 18,
+          color: '64748b',
+          align: 'center',
+        });
+      }
+      
+      // 콘텐츠를 단락으로 나누기
+      const paragraphs = project.generated_content.split('\n\n').filter(p => p.trim());
+      
+      // 각 단락을 슬라이드로
+      paragraphs.forEach((paragraph, index) => {
+        const contentSlide = pptx.addSlide();
+        contentSlide.background = { color: 'FFFFFF' };
+        
+        // 슬라이드 번호
+        contentSlide.addText(`${index + 1}`, {
+          x: 0.5,
+          y: 0.3,
+          w: 0.5,
+          h: 0.5,
+          fontSize: 14,
+          color: '94a3b8',
+        });
+        
+        // 내용
+        const lines = paragraph.split('\n');
+        const title = lines[0].substring(0, 60) + (lines[0].length > 60 ? '...' : '');
+        const content = lines.slice(1).join('\n').substring(0, 800);
+        
+        contentSlide.addText(title, {
+          x: 0.5,
+          y: 0.8,
+          w: 9,
+          h: 0.8,
+          fontSize: 28,
+          bold: true,
+          color: '1e293b',
+        });
+        
+        contentSlide.addText(content, {
+          x: 0.5,
+          y: 1.8,
+          w: 9,
+          h: 4,
+          fontSize: 16,
+          color: '475569',
+          valign: 'top',
+        });
+      });
+      
+      pptx.writeFile({ fileName: `${project.title.replace(/\s+/g, '_')}.pptx` });
+      
+      toast({
+        title: "PPT 다운로드 완료",
+        description: "PowerPoint 파일이 다운로드되었습니다.",
+      });
+    } catch (error) {
+      console.error('PPT generation error:', error);
+      toast({
+        title: "PPT 생성 실패",
+        description: "PowerPoint 생성 중 오류가 발생했습니다.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading || loadingProject) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -373,10 +529,14 @@ const ProjectDetail = () => {
 
         {/* 탭 네비게이션 */}
         <Tabs defaultValue="pipeline" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="pipeline" className="gap-2">
               <List className="h-4 w-4" />
               파이프라인 단계
+            </TabsTrigger>
+            <TabsTrigger value="infographic" className="gap-2">
+              <BarChart3 className="h-4 w-4" />
+              인포그래픽 미리보기
             </TabsTrigger>
             <TabsTrigger value="final" className="gap-2">
               <FileText className="h-4 w-4" />
@@ -486,6 +646,17 @@ const ProjectDetail = () => {
             )}
           </TabsContent>
 
+          {/* 인포그래픽 미리보기 탭 */}
+          <TabsContent value="infographic">
+            <InfographicPreview
+              title={project.title}
+              description={project.description || undefined}
+              aiModel={project.ai_model}
+              stages={stages}
+              createdAt={project.created_at}
+            />
+          </TabsContent>
+
           {/* 최종 결과물 탭 */}
           <TabsContent value="final">
             <Card>
@@ -535,6 +706,24 @@ const ProjectDetail = () => {
                         >
                           <Download className="h-4 w-4" />
                           MD
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDownloadPDF}
+                          className="gap-2"
+                        >
+                          <Download className="h-4 w-4" />
+                          PDF
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDownloadPPT}
+                          className="gap-2"
+                        >
+                          <Download className="h-4 w-4" />
+                          PPT
                         </Button>
                       </div>
                     </div>
