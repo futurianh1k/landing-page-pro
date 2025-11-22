@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, CheckCircle2, Clock, XCircle, Loader2, RefreshCw, FileText, List } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, XCircle, Loader2, RefreshCw, FileText, List, Download, Copy, Share2 } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
 
 type Project = Tables<"projects">;
@@ -231,6 +231,82 @@ const ProjectDetail = () => {
     }
   };
 
+  const handleDownloadMarkdown = () => {
+    if (!project?.generated_content) return;
+    
+    const content = `# ${project.title}\n\n${project.description || ''}\n\n---\n\n${project.generated_content}`;
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${project.title.replace(/\s+/g, '_')}.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "다운로드 완료",
+      description: "마크다운 파일이 다운로드되었습니다.",
+    });
+  };
+
+  const handleDownloadText = () => {
+    if (!project?.generated_content) return;
+    
+    const content = `${project.title}\n\n${project.description || ''}\n\n---\n\n${project.generated_content}`;
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${project.title.replace(/\s+/g, '_')}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "다운로드 완료",
+      description: "텍스트 파일이 다운로드되었습니다.",
+    });
+  };
+
+  const handleCopyToClipboard = async () => {
+    if (!project?.generated_content) return;
+    
+    try {
+      await navigator.clipboard.writeText(project.generated_content);
+      toast({
+        title: "복사 완료",
+        description: "클립보드에 내용이 복사되었습니다.",
+      });
+    } catch (error) {
+      toast({
+        title: "복사 실패",
+        description: "클립보드 복사 중 오류가 발생했습니다.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleShareLink = async () => {
+    const currentUrl = window.location.href;
+    
+    try {
+      await navigator.clipboard.writeText(currentUrl);
+      toast({
+        title: "링크 복사 완료",
+        description: "프로젝트 링크가 클립보드에 복사되었습니다.",
+      });
+    } catch (error) {
+      toast({
+        title: "복사 실패",
+        description: "링크 복사 중 오류가 발생했습니다.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading || loadingProject) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -416,10 +492,52 @@ const ProjectDetail = () => {
               {project.generated_content ? (
                 <>
                   <CardHeader>
-                    <CardTitle className="text-2xl">최종 생성 결과물</CardTitle>
-                    <CardDescription>
-                      모든 파이프라인 단계가 완료되어 생성된 최종 콘텐츠입니다
-                    </CardDescription>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <CardTitle className="text-2xl">최종 생성 결과물</CardTitle>
+                        <CardDescription>
+                          모든 파이프라인 단계가 완료되어 생성된 최종 콘텐츠입니다
+                        </CardDescription>
+                      </div>
+                      <div className="flex gap-2 flex-wrap justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleShareLink}
+                          className="gap-2"
+                        >
+                          <Share2 className="h-4 w-4" />
+                          링크 공유
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleCopyToClipboard}
+                          className="gap-2"
+                        >
+                          <Copy className="h-4 w-4" />
+                          복사
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDownloadText}
+                          className="gap-2"
+                        >
+                          <Download className="h-4 w-4" />
+                          TXT
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDownloadMarkdown}
+                          className="gap-2"
+                        >
+                          <Download className="h-4 w-4" />
+                          MD
+                        </Button>
+                      </div>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="bg-muted/50 p-6 rounded-lg border max-h-[600px] overflow-y-auto">
