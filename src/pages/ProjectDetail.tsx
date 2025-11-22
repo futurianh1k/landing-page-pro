@@ -51,7 +51,7 @@ const ProjectDetail = () => {
   }, [user, loading, navigate]);
 
   useEffect(() => {
-    if (user && id && selectedAiModel) {
+    if (user && id) {
       fetchProjectDetails();
       
       const channel = supabase
