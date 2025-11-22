@@ -656,6 +656,81 @@ const ProjectDetail = () => {
             </div>
             {getStatusBadge(project.status)}
           </div>
+
+          {/* 프로세싱 중 대형 로딩 카드 */}
+          {project.status === 'processing' && (
+            <Card className="border-primary/50 bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 mb-6 overflow-hidden">
+              <CardContent className="pt-8 pb-8">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="relative">
+                        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                        <div className="absolute inset-0 h-10 w-10 animate-ping opacity-20 rounded-full bg-primary" />
+                      </div>
+                      <div>
+                        <p className="text-xl font-bold mb-1">AI 콘텐츠 생성 중</p>
+                        <p className="text-sm text-muted-foreground">
+                          {(() => {
+                            const processingStage = stages.find(s => s.status === 'processing');
+                            if (processingStage) return processingStage.stage_name;
+                            const completedCount = stages.filter(s => s.status === 'completed').length;
+                            if (completedCount === 0) return '준비 중...';
+                            if (completedCount === stages.length) return '최종 검토 중...';
+                            return stages[completedCount]?.stage_name || '처리 중...';
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-4xl font-bold text-primary mb-1">
+                        {Math.round((stages.filter(s => s.status === 'completed').length / (stages.length || 6)) * 100)}%
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {stages.filter(s => s.status === 'completed').length} / {stages.length || 6} 완료
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <Progress 
+                    value={(stages.filter(s => s.status === 'completed').length / (stages.length || 6)) * 100} 
+                    className="h-3" 
+                  />
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                    {['콘텐츠 기획', '시나리오 작성', '이미지 생성', '음성/영상 제작', '콘텐츠 조립', '배포'].map((stageName, idx) => {
+                      const stage = stages.find(s => s.stage_name === stageName);
+                      const status = stage?.status || 'pending';
+                      return (
+                        <div 
+                          key={idx}
+                          className={`relative flex flex-col items-center gap-2 px-4 py-3 rounded-xl text-sm transition-all duration-500 ${
+                            status === 'completed' 
+                              ? 'bg-green-500/10 border-2 border-green-500/30 text-green-700 dark:text-green-400' 
+                              : status === 'processing'
+                              ? 'bg-primary/10 border-2 border-primary text-primary scale-105 shadow-lg'
+                              : 'bg-muted/50 border border-border text-muted-foreground'
+                          }`}
+                        >
+                          <div className={`h-3 w-3 rounded-full transition-all ${
+                            status === 'completed' 
+                              ? 'bg-green-500 shadow-lg shadow-green-500/50' 
+                              : status === 'processing'
+                              ? 'bg-primary animate-pulse shadow-lg shadow-primary/50'
+                              : 'bg-muted-foreground/30'
+                          }`} />
+                          <span className="text-center font-medium text-xs leading-tight">{stageName}</span>
+                          {status === 'processing' && (
+                            <div className="absolute inset-0 rounded-xl border-2 border-primary animate-pulse" />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           
           <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-6">
             <span>생성일: {new Date(project.created_at).toLocaleDateString('ko-KR')}</span>
@@ -693,48 +768,50 @@ const ProjectDetail = () => {
             )}
           </div>
 
-          {/* 진행률 표시 */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold">전체 진행률</span>
-                    <Badge variant="outline" className="text-xs">
-                      {completedStages} / {stages.length} 단계 완료
-                    </Badge>
+          {/* 진행률 표시 - 완료된 프로젝트만 */}
+          {project.status === 'completed' && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold">전체 진행률</span>
+                      <Badge variant="outline" className="text-xs">
+                        {completedStages} / {stages.length} 단계 완료
+                      </Badge>
+                    </div>
+                    <span className="text-2xl font-bold text-primary">{Math.round(progressPercentage)}%</span>
                   </div>
-                  <span className="text-2xl font-bold text-primary">{Math.round(progressPercentage)}%</span>
-                </div>
-                <Progress value={progressPercentage} className="h-3" />
-              </CardContent>
-            </Card>
+                  <Progress value={progressPercentage} className="h-3" />
+                </CardContent>
+              </Card>
 
-            <Card className="border-dashed">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold mb-1">다른 AI 모델로 재시도</p>
-                    <p className="text-xs text-muted-foreground">다양한 AI의 결과를 비교해보세요</p>
+              <Card className="border-dashed">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold mb-1">다른 AI 모델로 재시도</p>
+                      <p className="text-xs text-muted-foreground">다양한 AI의 결과를 비교해보세요</p>
+                    </div>
+                    <div className="flex gap-2">
+                      {['gemini', 'claude', 'chatgpt'].filter(m => m !== selectedAiModel).map((model) => (
+                        <Button
+                          key={model}
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleRetryWithAi(model)}
+                          disabled={retryingWithAi}
+                        >
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          {model.toUpperCase()}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    {['gemini', 'claude', 'chatgpt'].filter(m => m !== selectedAiModel).map((model) => (
-                      <Button
-                        key={model}
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleRetryWithAi(model)}
-                        disabled={retryingWithAi}
-                      >
-                        <Sparkles className="h-3 w-3 mr-1" />
-                        {model.toUpperCase()}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
 
         {/* 탭 네비게이션 */}
