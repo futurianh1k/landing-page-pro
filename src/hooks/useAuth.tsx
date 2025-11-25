@@ -11,16 +11,14 @@ export const useAuth = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
       }
     );
 
-    // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -53,10 +51,11 @@ export const useAuth = () => {
       });
       
       navigate('/');
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
       toast({
         title: "회원가입 실패",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     }
@@ -77,10 +76,11 @@ export const useAuth = () => {
       });
       
       navigate('/');
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
       toast({
         title: "로그인 실패",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     }
@@ -96,10 +96,11 @@ export const useAuth = () => {
       });
 
       if (error) throw error;
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
       toast({
         title: "Google 로그인 실패",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     }
@@ -115,10 +116,11 @@ export const useAuth = () => {
       });
       
       navigate('/auth');
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
       toast({
         title: "로그아웃 실패",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     }
