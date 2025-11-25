@@ -1,16 +1,17 @@
 # Local development (로컬 개발)
 
-## 1. 환경 복사 및 의존성 설치
+## 1. 의존성 설치
 ```
 cd <YOUR_PROJECT_NAME>
 npm ci
 ```
 
 ## 2. 환경 변수 설정
-루트에 `.env.example`이 있으니 복사하여 `.env`로 만드세요:
+`.env.example`을 복사해 `.env`를 만들고 실제 값을 채워주세요.
 ```
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=public-anon-key
+cp .env.example .env
+# VITE_SUPABASE_URL=https://your-project.supabase.co
+# VITE_SUPABASE_ANON_KEY=public-anon-key
 ```
 
 ## 3. 개발 서버 실행
@@ -18,17 +19,25 @@ VITE_SUPABASE_ANON_KEY=public-anon-key
 npm run dev
 ```
 
-## 4. 테스트, 타입 검사, 린트
+## 4. 테스트 / 타입 / 린트
 ```
-npm run test        # 인터랙티브 테스트 UI
-npm run test:run    # CI/자동 실행용
+npm run test        # Vitest UI
+npm run test:run    # CI/헤드리스 실행
 npm run typecheck   # 타입 검사
 npm run lint        # 린트 확인
 npm run lint:fix    # 린트 자동 수정
 ```
 
-## 푸시 권한 문제
-원격에 푸시할 때 `403` 권한 오류가 나오면 SSH 키 설정 또는 Personal Access Token(PAT) 사용을 권장합니다.
+## Supabase 준비
+- 마이그레이션 적용: Supabase CLI로 `supabase db push` (또는 필요한 방식으로 `supabase/migrations` 반영)
+- Edge Function 배포: `supabase functions deploy process-document` 후 프로젝트 대시보드에서 환경변수 설정
+  - `LOVABLE_API_KEY`
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+- 로컬에서 함수 테스트 시 `supabase start` + `supabase functions serve --env-file .env` 사용 가능
+
+## 원격 권한 문제
+원격 저장소에 푸시할 때 `403`이 나면 SSH 키를 등록하거나 Personal Access Token(PAT)을 사용해 보세요.
 
 ---
-이 파일은 로컬 개발 시작 가이드를 빠르게 안내하기 위한 별도 문서입니다. 원하시면 `README.md`에 통합해 드리겠습니다.
+추가 안내가 필요하면 `README.md`도 함께 확인하세요.

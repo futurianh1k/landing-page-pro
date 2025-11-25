@@ -9,7 +9,7 @@ const corsHeaders = {
 const STAGE_NAMES = [
   "콘텐츠 기획",
   "시나리오 작성", 
-  "이미지 생성",
+  "페이지 작성",
   "음성/영상 제작",
   "콘텐츠 조립",
   "배포"
@@ -71,11 +71,11 @@ serve(async (req) => {
           messages: [
             {
               role: 'system',
-              content: '당신은 교육 콘텐츠 생성 전문가입니다. 사용자의 피드백을 반영하여 콘텐츠를 개선합니다.'
+              content: '당신은 교육 콘텐츠 제작 전문가입니다. 사용자의 피드백을 반영해 콘텐츠를 개선하세요.'
             },
             {
               role: 'user',
-              content: `다음 단계를 사용자 피드백에 따라 재생성해주세요:\n\n단계: ${stage.stage_name}\n기존 콘텐츠: ${stage.content}\n사용자 피드백: ${stage.feedback}\n\n피드백을 반영하여 개선된 콘텐츠를 생성해주세요.`
+              content: `다음 단계와 사용자 피드백에 따라 재생성해주세요.\n\n단계: ${stage.stage_name}\n기존 콘텐츠: ${stage.content}\n사용자 피드백: ${stage.feedback}\n\n피드백을 반영해 개선된 콘텐츠를 작성해주세요.`
             }
           ],
         }),
@@ -109,7 +109,7 @@ serve(async (req) => {
       );
     }
 
-    // 새 프로젝트 처리
+    // 기본 라우트 처리
     if (!projectId || !documentContent || !aiModel) {
       console.error('Missing required fields:', { projectId, documentContent, aiModel });
       return new Response(
@@ -150,7 +150,7 @@ serve(async (req) => {
       .update({ status: 'processing' })
       .eq('id', projectId);
 
-    // 해당 AI 모델의 기존 stages 삭제 (재시도인 경우)
+    // 선택한 AI 모델의 기존 stages 삭제 (재시도인 경우)
     if (retryWithDifferentAi) {
       await supabase
         .from('project_stages')
@@ -195,11 +195,11 @@ serve(async (req) => {
             messages: [
               {
                 role: 'system',
-                content: '당신은 교육 콘텐츠 생성 전문가입니다. 각 단계에 맞는 구체적이고 실용적인 콘텐츠를 생성합니다.'
+                content: '당신은 교육 콘텐츠 제작 전문가입니다. 해당 단계에 맞는 구체적이고 실행 가능한 콘텐츠를 작성하세요.'
               },
               {
                 role: 'user',
-                content: `문서: ${documentContent}\n\n"${stageName}" 단계에 대한 상세 콘텐츠를 생성해주세요. 구체적이고 실행 가능한 내용으로 작성해주세요.`
+                content: `문서: ${documentContent}\n\n"${stageName}" 단계에 대한 상세 콘텐츠를 작성해주세요. 구체적이고 실행 가능한 내용으로 작성해주세요.`
               }
             ],
           }),
@@ -264,7 +264,7 @@ serve(async (req) => {
       .eq('project_id', projectId)
       .eq('ai_model', aiModel);
 
-    // 프로젝트의 기본 generated_content도 업데이트 (첫 번째 AI 또는 현재 AI)
+    // 프로젝트의 기본 generated_content 업데이트 (첫 번째 AI 또는 현재 AI)
     await supabase
       .from('projects')
       .update({ 
