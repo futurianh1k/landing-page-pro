@@ -1,4 +1,5 @@
-﻿import { useCallback, useEffect, useState } from "react";
+﻿
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,17 +17,18 @@ import { Tables } from "@/integrations/supabase/types";
 import { InfographicPreview } from "@/components/InfographicPreview";
 import jsPDF from 'jspdf';
 import PptxGenJS from 'pptxgenjs';
+import { getCurrentContent } from "@/utils/contentSelector";
 
 type Project = Tables<"projects">;
 type ProjectStage = Tables<"project_stages">;
 
 const STAGE_NAMES = [
-  "肄섑뀗痢?湲고쉷",
-  "?쒕굹由ъ삤 ?묒꽦",
-  "?대?吏 ?앹꽦",
-  "?뚯꽦/?곸긽 ?쒖옉",
-  "肄섑뀗痢?議곕┰",
-  "諛고룷"
+  "콘텐츠 기획",
+  "시나리오 작성",
+  "이미지 생성",
+  "음성/영상 제작",
+  "콘텐츠 조립",
+  "배포"
 ];
 
 const ProjectDetail = () => {
@@ -41,9 +43,9 @@ const ProjectDetail = () => {
   const [processingStage, setProcessingStage] = useState<string | null>(null);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [selectedAiModel, setSelectedAiModel] = useState<string>("");
-  const [aiResults, setAiResults] = useState<Tables<"project_ai_results">[]>([]);
+  const [aiResults, setAiResults] = useState<any[]>([]);
   const [retryingWithAi, setRetryingWithAi] = useState(false);
-
+  const hasLoadedStagesRef = useRef(false);
   useEffect(() => {
     if (!loading && !user) {
       navigate('/auth');
@@ -101,8 +103,8 @@ const ProjectDetail = () => {
           clearInterval(pollingInterval);
           return;
         }
-        
-        if (stages.length === 0) {
+
+        if (!hasLoadedStagesRef.current) {
           console.log('Retrying to fetch project details...');
           fetchProjectDetails();
           retryCount++;
@@ -135,8 +137,8 @@ const ProjectDetail = () => {
       
       if (!projectData) {
         toast({
-          title: "?꾨줈?앺듃瑜?李얠쓣 ???놁뒿?덈떎",
-          description: "議댁옱?섏? ?딄굅???묎렐 沅뚰븳???녿뒗 ?꾨줈?앺듃?낅땲??",
+          title: "프로젝트를 찾을 수 없습니다",
+          description: "존재하지 않거나 접근 권한이 없는 프로젝트입니다.",
           variant: "destructive",
         });
         navigate('/dashboard');
@@ -146,7 +148,7 @@ const ProjectDetail = () => {
       setProject(projectData);
       setSelectedAiModel(projectData.ai_model);
 
-      // AI 寃곌낵 媛?몄삤湲?
+      // AI 결과 가져오기
       const { data: aiResultsData, error: aiResultsError } = await supabase
         .from("project_ai_results")
         .select("*")
@@ -156,7 +158,7 @@ const ProjectDetail = () => {
       if (aiResultsError) throw aiResultsError;
       setAiResults(aiResultsData || []);
 
-      // ?④퀎 ?뺣낫 媛?몄삤湲?(?좏깮??AI 紐⑤뜽??stages)
+      // 단계 정보 가져오기 (선택된 AI 모델의 stages)
       const { data: stagesData, error: stagesError } = await supabase
         .from("project_stages")
         .select("*")
@@ -166,24 +168,26 @@ const ProjectDetail = () => {
 
       if (stagesError) throw stagesError;
       setStages(stagesData || []);
+      if ((stagesData || []).length > 0) {
+        hasLoadedStagesRef.current = true;
+      }
       
     } catch (error) {
       console.error("Error fetching project details:", error);
       toast({
-        title: "?ㅻ쪟 諛쒖깮",
-        description: "?꾨줈?앺듃 ?뺣낫瑜?遺덈윭?ㅻ뒗 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎.",
+        title: "오류 발생",
+        description: "프로젝트 정보를 불러오는 중 오류가 발생했습니다.",
         variant: "destructive",
       });
     } finally {
       setLoadingProject(false);
     }
   };
-
   const handleStageRegenerate = async (stageId: string, stageOrder: number) => {
     if (!feedback[stageId]?.trim()) {
       toast({
-        title: "?쇰뱶諛??꾩슂",
-        description: "?섏젙 ?붿껌 ?ы빆???낅젰?댁＜?몄슂.",
+        title: "피드백 필요",
+        description: "수정 요청 사항을 입력해주세요.",
         variant: "destructive",
       });
       return;
@@ -192,7 +196,7 @@ const ProjectDetail = () => {
     try {
       setProcessingStage(stageId);
       
-      // ?쇰뱶諛????諛??곹깭 ?낅뜲?댄듃
+      // 피드백 저장 및 상태 업데이트
       const { error } = await supabase
         .from("project_stages")
         .update({
@@ -204,11 +208,11 @@ const ProjectDetail = () => {
       if (error) throw error;
 
       toast({
-        title: "?ъ깮???붿껌",
-        description: "?④퀎媛 ?ъ깮??以묒엯?덈떎.",
+        title: "재생성 요청",
+        description: "단계가 재생성 중입니다.",
       });
 
-      // Edge function ?몄텧?섏뿬 ?ъ깮??
+      // Edge function 호출하여 재생성
       const { error: funcError } = await supabase.functions.invoke("process-document", {
         body: {
           projectId: id,
@@ -224,8 +228,8 @@ const ProjectDetail = () => {
     } catch (error) {
       console.error("Error regenerating stage:", error);
       toast({
-        title: "?ㅻ쪟 諛쒖깮",
-        description: "?④퀎 ?ъ깮??以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎.",
+        title: "오류 발생",
+        description: "단계 재생성 중 오류가 발생했습니다.",
         variant: "destructive",
       });
     } finally {
@@ -249,20 +253,25 @@ const ProjectDetail = () => {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "completed":
-        return <Badge className="bg-success text-success-foreground">?꾨즺</Badge>;
+        return <Badge className="bg-success text-success-foreground">완료</Badge>;
       case "processing":
-        return <Badge className="bg-primary text-primary-foreground">泥섎━ 以?/Badge>;
+        return <Badge className="bg-primary text-primary-foreground">처리 중</Badge>;
       case "failed":
-        return <Badge variant="destructive">?ㅽ뙣</Badge>;
+        return <Badge variant="destructive">실패</Badge>;
       default:
-        return <Badge variant="outline">?湲?以?/Badge>;
+        return <Badge variant="outline">대기 중</Badge>;
     }
   };
 
+  const currentContent = useMemo(
+    () => getCurrentContent(project, aiResults, selectedAiModel),
+    [project, aiResults, selectedAiModel]
+  );
+
   const handleDownloadMarkdown = () => {
-    if (!project?.generated_content) return;
+    if (!project || !currentContent) return;
     
-    const content = `# ${project.title}\n\n${project.description || ''}\n\n---\n\n${project.generated_content}`;
+    const content = `# ${project.title}\n\n${project.description || ''}\n\n---\n\n${currentContent}`;
     const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -274,15 +283,15 @@ const ProjectDetail = () => {
     URL.revokeObjectURL(url);
     
     toast({
-      title: "?ㅼ슫濡쒕뱶 ?꾨즺",
-      description: "留덊겕?ㅼ슫 ?뚯씪???ㅼ슫濡쒕뱶?섏뿀?듬땲??",
+      title: "다운로드 완료",
+      description: "마크다운 파일이 다운로드되었습니다.",
     });
   };
 
   const handleDownloadText = () => {
-    if (!project?.generated_content) return;
+    if (!project || !currentContent) return;
     
-    const content = `${project.title}\n\n${project.description || ''}\n\n---\n\n${project.generated_content}`;
+    const content = `${project.title}\n\n${project.description || ''}\n\n---\n\n${currentContent}`;
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -294,24 +303,23 @@ const ProjectDetail = () => {
     URL.revokeObjectURL(url);
     
     toast({
-      title: "?ㅼ슫濡쒕뱶 ?꾨즺",
-      description: "?띿뒪???뚯씪???ㅼ슫濡쒕뱶?섏뿀?듬땲??",
+      title: "다운로드 완료",
+      description: "텍스트 파일이 다운로드되었습니다.",
     });
   };
-
   const handleCopyToClipboard = async () => {
-    if (!project?.generated_content) return;
+    if (!currentContent) return;
     
     try {
-      await navigator.clipboard.writeText(project.generated_content);
+      await navigator.clipboard.writeText(currentContent);
       toast({
-        title: "蹂듭궗 ?꾨즺",
-        description: "?대┰蹂대뱶???댁슜??蹂듭궗?섏뿀?듬땲??",
+        title: "복사 완료",
+        description: "클립보드에 내용이 복사되었습니다.",
       });
     } catch (error) {
       toast({
-        title: "蹂듭궗 ?ㅽ뙣",
-        description: "?대┰蹂대뱶 蹂듭궗 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎.",
+        title: "복사 실패",
+        description: "클립보드 복사 중 오류가 발생했습니다.",
         variant: "destructive",
       });
     }
@@ -323,20 +331,20 @@ const ProjectDetail = () => {
     try {
       await navigator.clipboard.writeText(currentUrl);
       toast({
-        title: "留곹겕 蹂듭궗 ?꾨즺",
-        description: "?꾨줈?앺듃 留곹겕媛 ?대┰蹂대뱶??蹂듭궗?섏뿀?듬땲??",
+        title: "링크 복사 완료",
+        description: "프로젝트 링크가 클립보드에 복사되었습니다.",
       });
     } catch (error) {
       toast({
-        title: "蹂듭궗 ?ㅽ뙣",
-        description: "留곹겕 蹂듭궗 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎.",
+        title: "복사 실패",
+        description: "링크 복사 중 오류가 발생했습니다.",
         variant: "destructive",
       });
     }
   };
 
   const handleDownloadPDF = () => {
-    if (!project?.generated_content) return;
+    if (!project || !currentContent) return;
     
     try {
       const doc = new jsPDF();
@@ -345,14 +353,14 @@ const ProjectDetail = () => {
       const margin = 20;
       const maxWidth = pageWidth - (margin * 2);
       
-      // ?쒕ぉ
+      // 제목
       doc.setFontSize(20);
       doc.setFont('helvetica', 'bold');
       doc.text(project.title, margin, margin);
       
       let yPos = margin + 15;
       
-      // ?ㅻ챸
+      // 설명
       if (project.description) {
         doc.setFontSize(12);
         doc.setFont('helvetica', 'normal');
@@ -361,14 +369,14 @@ const ProjectDetail = () => {
         yPos += descLines.length * 7 + 10;
       }
       
-      // 援щ텇??
+      // 구분선
       doc.setDrawColor(200, 200, 200);
       doc.line(margin, yPos, pageWidth - margin, yPos);
       yPos += 10;
       
-      // 肄섑뀗痢?
+      // 콘텐츠
       doc.setFontSize(11);
-      const contentLines = doc.splitTextToSize(project.generated_content, maxWidth);
+      const contentLines = doc.splitTextToSize(currentContent, maxWidth);
       
       contentLines.forEach((line: string) => {
         if (yPos > pageHeight - margin) {
@@ -382,26 +390,25 @@ const ProjectDetail = () => {
       doc.save(`${project.title.replace(/\s+/g, '_')}.pdf`);
       
       toast({
-        title: "PDF ?ㅼ슫濡쒕뱶 ?꾨즺",
-        description: "PDF ?뚯씪???ㅼ슫濡쒕뱶?섏뿀?듬땲??",
+        title: "PDF 다운로드 완료",
+        description: "PDF 파일이 다운로드되었습니다.",
       });
     } catch (error) {
       console.error('PDF generation error:', error);
       toast({
-        title: "PDF ?앹꽦 ?ㅽ뙣",
-        description: "PDF ?앹꽦 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎.",
+        title: "PDF 생성 실패",
+        description: "PDF 생성 중 오류가 발생했습니다.",
         variant: "destructive",
       });
     }
   };
-
   const handleDownloadPPT = () => {
-    if (!project?.generated_content) return;
+    if (!project || !currentContent) return;
     
     try {
       const pptx = new PptxGenJS();
       
-      // ?쒕ぉ ?щ씪?대뱶
+      // 제목 슬라이드
       const titleSlide = pptx.addSlide();
       titleSlide.background = { color: 'F1F5F9' };
       
@@ -428,15 +435,15 @@ const ProjectDetail = () => {
         });
       }
       
-      // 肄섑뀗痢좊? ?⑤씫?쇰줈 ?섎늻湲?
-      const paragraphs = project.generated_content.split('\n\n').filter(p => p.trim());
+      // 콘텐츠를 단락으로 나누기
+      const paragraphs = currentContent.split('\n\n').filter(p => p.trim());
       
-      // 媛??⑤씫???щ씪?대뱶濡?
+      // 각 단락을 슬라이드로
       paragraphs.forEach((paragraph, index) => {
         const contentSlide = pptx.addSlide();
         contentSlide.background = { color: 'FFFFFF' };
         
-        // ?щ씪?대뱶 踰덊샇
+        // 슬라이드 번호
         contentSlide.addText(`${index + 1}`, {
           x: 0.5,
           y: 0.3,
@@ -446,7 +453,7 @@ const ProjectDetail = () => {
           color: '94a3b8',
         });
         
-        // ?댁슜
+        // 내용
         const lines = paragraph.split('\n');
         const title = lines[0].substring(0, 60) + (lines[0].length > 60 ? '...' : '');
         const content = lines.slice(1).join('\n').substring(0, 800);
@@ -475,14 +482,14 @@ const ProjectDetail = () => {
       pptx.writeFile({ fileName: `${project.title.replace(/\s+/g, '_')}.pptx` });
       
       toast({
-        title: "PPT ?ㅼ슫濡쒕뱶 ?꾨즺",
-        description: "PowerPoint ?뚯씪???ㅼ슫濡쒕뱶?섏뿀?듬땲??",
+        title: "PPT 다운로드 완료",
+        description: "PowerPoint 파일이 다운로드되었습니다.",
       });
     } catch (error) {
       console.error('PPT generation error:', error);
       toast({
-        title: "PPT ?앹꽦 ?ㅽ뙣",
-        description: "PowerPoint ?앹꽦 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎.",
+        title: "PPT 생성 실패",
+        description: "PowerPoint 생성 중 오류가 발생했습니다.",
         variant: "destructive",
       });
     }
@@ -491,7 +498,7 @@ const ProjectDetail = () => {
   const handleSaveAsTemplate = async () => {
     if (!project || !user) return;
 
-    const templateName = prompt("?쒗뵆由??대쫫???낅젰?섏꽭??", `${project.title} ?쒗뵆由?);
+    const templateName = prompt("템플릿 이름을 입력하세요:", `${project.title} 템플릿`);
     if (!templateName) return;
 
     try {
@@ -511,25 +518,24 @@ const ProjectDetail = () => {
       if (error) throw error;
 
       toast({
-        title: "?쒗뵆由?????꾨즺",
-        description: "?꾨줈?앺듃媛 ?쒗뵆由우쑝濡???λ릺?덉뒿?덈떎.",
+        title: "템플릿 저장 완료",
+        description: "프로젝트가 템플릿으로 저장되었습니다.",
       });
     } catch (error) {
       console.error("Error saving template:", error);
       toast({
-        title: "?ㅻ쪟 諛쒖깮",
-        description: "?쒗뵆由????以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎.",
+        title: "오류 발생",
+        description: "템플릿 저장 중 오류가 발생했습니다.",
         variant: "destructive",
       });
     } finally {
       setSavingTemplate(false);
     }
   };
-
   const handleAiModelChange = async (newModel: string) => {
     setSelectedAiModel(newModel);
     
-    // ?좏깮??AI 紐⑤뜽??stages 遺덈윭?ㅺ린
+    // 선택한 AI 모델의 stages 불러오기
     try {
       const { data: stagesData, error } = await supabase
         .from("project_stages")
@@ -551,30 +557,30 @@ const ProjectDetail = () => {
     try {
       setRetryingWithAi(true);
       
-      // ?좏깮??AI 紐⑤뜽濡?寃곌낵媛 ?대? ?덈뒗吏 ?뺤씤
+      // 선택한 AI 모델로 결과가 이미 있는지 확인
       const existingResult = aiResults.find(r => r.ai_model === aiModel);
       if (existingResult && existingResult.status === 'completed') {
         toast({
-          title: "?대? ?앹꽦??寃곌낵媛 ?덉뒿?덈떎",
-          description: "?대떦 AI 紐⑤뜽??寃곌낵瑜??좏깮?댁꽌 ?뺤씤?섏꽭??",
+          title: "이미 생성된 결과가 있습니다",
+          description: "해당 AI 모델의 결과를 선택해서 확인하세요.",
         });
         setSelectedAiModel(aiModel);
         handleAiModelChange(aiModel);
         return;
       }
 
-      // ?꾨줈?앺듃 ?곹깭 ?낅뜲?댄듃
+      // 프로젝트 상태 업데이트
       await supabase
         .from("projects")
         .update({ status: "processing" })
         .eq("id", project.id);
 
       toast({
-        title: "AI 泥섎━ ?쒖옉",
-        description: `${aiModel.toUpperCase()} 紐⑤뜽濡?肄섑뀗痢좊? ?앹꽦?섍퀬 ?덉뒿?덈떎.`,
+        title: "AI 처리 시작",
+        description: `${aiModel.toUpperCase()} 모델로 콘텐츠를 생성하고 있습니다.`,
       });
 
-      // Edge function ?몄텧
+      // Edge function 호출
       const { error: funcError } = await supabase.functions.invoke("process-document", {
         body: {
           projectId: project.id,
@@ -586,24 +592,23 @@ const ProjectDetail = () => {
 
       if (funcError) throw funcError;
 
-      // ?좏깮??AI 紐⑤뜽濡?蹂寃?
+      // 선택한 AI 모델로 변경
       setSelectedAiModel(aiModel);
     } catch (error) {
       console.error("Error retrying with AI:", error);
       toast({
-        title: "?ㅻ쪟 諛쒖깮",
-        description: "AI ?ъ떆??以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎.",
+        title: "오류 발생",
+        description: "AI 재시도 중 오류가 발생했습니다.",
         variant: "destructive",
       });
     } finally {
       setRetryingWithAi(false);
     }
   };
-
   if (loading || loadingProject) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">濡쒕뵫 以?..</div>
+        <div className="animate-pulse text-muted-foreground">로딩 중...</div>
       </div>
     );
   }
@@ -626,7 +631,7 @@ const ProjectDetail = () => {
             onClick={() => navigate('/dashboard')}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
-            ?꾨줈?앺듃 紐⑸줉?쇰줈
+            프로젝트 목록으로
           </Button>
           
           {project.status === 'completed' && (
@@ -640,12 +645,11 @@ const ProjectDetail = () => {
               ) : (
                 <Save className="h-4 w-4 mr-2" />
               )}
-              ?쒗뵆由우쑝濡????
+              템플릿으로 저장
             </Button>
           )}
         </div>
-
-        {/* ?꾨줈?앺듃 ?ㅻ뜑 */}
+        {/* 프로젝트 헤더 */}
         <div className="mb-8">
           <div className="flex items-start justify-between mb-4">
             <div className="flex-1">
@@ -657,7 +661,7 @@ const ProjectDetail = () => {
             {getStatusBadge(project.status)}
           </div>
 
-          {/* ?꾨줈?몄떛 以????濡쒕뵫 移대뱶 */}
+          {/* 프로세싱 중 대형 로딩 카드 */}
           {project.status === 'processing' && (
             <Card className="border-primary/50 bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 mb-6 overflow-hidden">
               <CardContent className="pt-8 pb-8">
@@ -669,15 +673,15 @@ const ProjectDetail = () => {
                         <div className="absolute inset-0 h-10 w-10 animate-ping opacity-20 rounded-full bg-primary" />
                       </div>
                       <div>
-                        <p className="text-xl font-bold mb-1">AI 肄섑뀗痢??앹꽦 以?/p>
+                        <p className="text-xl font-bold mb-1">AI 콘텐츠 생성 중</p>
                         <p className="text-sm text-muted-foreground">
                           {(() => {
                             const processingStage = stages.find(s => s.status === 'processing');
                             if (processingStage) return processingStage.stage_name;
                             const completedCount = stages.filter(s => s.status === 'completed').length;
-                            if (completedCount === 0) return '以鍮?以?..';
-                            if (completedCount === stages.length) return '理쒖쥌 寃??以?..';
-                            return stages[completedCount]?.stage_name || '泥섎━ 以?..';
+                            if (completedCount === 0) return '준비 중...';
+                            if (completedCount === stages.length) return '최종 검토 중...';
+                            return stages[completedCount]?.stage_name || '처리 중...';
                           })()}
                         </p>
                       </div>
@@ -687,7 +691,7 @@ const ProjectDetail = () => {
                         {Math.round((stages.filter(s => s.status === 'completed').length / (stages.length || 6)) * 100)}%
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {stages.filter(s => s.status === 'completed').length} / {stages.length || 6} ?꾨즺
+                        {stages.filter(s => s.status === 'completed').length} / {stages.length || 6} 완료
                       </p>
                     </div>
                   </div>
@@ -698,7 +702,7 @@ const ProjectDetail = () => {
                   />
                   
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                    {['肄섑뀗痢?湲고쉷', '?쒕굹由ъ삤 ?묒꽦', '?대?吏 ?앹꽦', '?뚯꽦/?곸긽 ?쒖옉', '肄섑뀗痢?議곕┰', '諛고룷'].map((stageName, idx) => {
+                    {['콘텐츠 기획', '시나리오 작성', '이미지 생성', '음성/영상 제작', '콘텐츠 조립', '배포'].map((stageName, idx) => {
                       const stage = stages.find(s => s.stage_name === stageName);
                       const status = stage?.status || 'pending';
                       return (
@@ -733,10 +737,10 @@ const ProjectDetail = () => {
           )}
           
           <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-6">
-            <span>?앹꽦?? {new Date(project.created_at).toLocaleDateString('ko-KR')}</span>
-            <span>??/span>
+            <span>생성일: {new Date(project.created_at).toLocaleDateString('ko-KR')}</span>
+            <span>?</span>
             <div className="flex items-center gap-2">
-              <span>AI 紐⑤뜽:</span>
+              <span>AI 모델:</span>
               <Select value={selectedAiModel} onValueChange={handleAiModelChange}>
                 <SelectTrigger className="w-[140px] h-8">
                   <SelectValue />
@@ -750,9 +754,9 @@ const ProjectDetail = () => {
             </div>
             {aiResults.length > 0 && (
               <>
-                <span>??/span>
+                <span>?</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs">?앹꽦??AI 寃곌낵: </span>
+                  <span className="text-xs">생성된 AI 결과: </span>
                   {aiResults.map((result) => (
                     <Badge 
                       key={result.id} 
@@ -767,17 +771,16 @@ const ProjectDetail = () => {
               </>
             )}
           </div>
-
-          {/* 吏꾪뻾瑜??쒖떆 - ?꾨즺???꾨줈?앺듃留?*/}
+          {/* 진행률 표시 - 완료된 프로젝트만 */}
           {project.status === 'completed' && (
             <div className="grid gap-4 md:grid-cols-2">
               <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold">?꾩껜 吏꾪뻾瑜?/span>
+                      <span className="text-sm font-semibold">전체 진행률</span>
                       <Badge variant="outline" className="text-xs">
-                        {completedStages} / {stages.length} ?④퀎 ?꾨즺
+                        {completedStages} / {stages.length} 단계 완료
                       </Badge>
                     </div>
                     <span className="text-2xl font-bold text-primary">{Math.round(progressPercentage)}%</span>
@@ -790,8 +793,8 @@ const ProjectDetail = () => {
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-semibold mb-1">?ㅻⅨ AI 紐⑤뜽濡??ъ떆??/p>
-                      <p className="text-xs text-muted-foreground">?ㅼ뼇??AI??寃곌낵瑜?鍮꾧탳?대낫?몄슂</p>
+                      <p className="text-sm font-semibold mb-1">다른 AI 모델로 재시도</p>
+                      <p className="text-xs text-muted-foreground">다양한 AI의 결과를 비교해보세요</p>
                     </div>
                     <div className="flex gap-2">
                       {['gemini', 'claude', 'chatgpt'].filter(m => m !== selectedAiModel).map((model) => (
@@ -813,32 +816,31 @@ const ProjectDetail = () => {
             </div>
           )}
         </div>
-
-        {/* ???ㅻ퉬寃뚯씠??*/}
+        {/* 탭 네비게이션 */}
         <Tabs defaultValue="pipeline" className="space-y-6">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="pipeline" className="gap-2">
               <List className="h-4 w-4" />
-              ?뚯씠?꾨씪???④퀎
+              파이프라인 단계
             </TabsTrigger>
             <TabsTrigger value="infographic" className="gap-2">
               <BarChart3 className="h-4 w-4" />
-              ?명룷洹몃옒??誘몃━蹂닿린
+              인포그래픽 미리보기
             </TabsTrigger>
             <TabsTrigger value="final" className="gap-2">
               <FileText className="h-4 w-4" />
-              理쒖쥌 寃곌낵臾?
+              최종 결과물
             </TabsTrigger>
           </TabsList>
 
-          {/* ?뚯씠?꾨씪????*/}
+          {/* 파이프라인 탭 */}
           <TabsContent value="pipeline" className="space-y-4">
             {stages.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-                  <p className="text-lg font-semibold mb-2">?꾨줈?앺듃 ?④퀎瑜??앹꽦?섍퀬 ?덉뒿?덈떎</p>
-                  <p className="text-sm text-muted-foreground">?좎떆留?湲곕떎?ㅼ＜?몄슂...</p>
+                  <p className="text-lg font-semibold mb-2">프로젝트 단계를 생성하고 있습니다</p>
+                  <p className="text-sm text-muted-foreground">잠시만 기다려주세요...</p>
                 </CardContent>
               </Card>
             ) : (
@@ -858,7 +860,7 @@ const ProjectDetail = () => {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <CardTitle className="text-lg">
-                              ?④퀎 {index + 1}: {STAGE_NAMES[stage.stage_order - 1]}
+                              단계 {index + 1}: {STAGE_NAMES[stage.stage_order - 1]}
                             </CardTitle>
                             {getStatusBadge(stage.status)}
                           </div>
@@ -871,7 +873,7 @@ const ProjectDetail = () => {
                         <div>
                           <div className="flex items-center gap-2 mb-3">
                             <div className="h-px flex-1 bg-border" />
-                            <span className="text-xs font-semibold text-muted-foreground uppercase">?앹꽦??肄섑뀗痢?/span>
+                            <span className="text-xs font-semibold text-muted-foreground uppercase">생성된 콘텐츠</span>
                             <div className="h-px flex-1 bg-border" />
                           </div>
                           <div className="bg-muted/50 p-5 rounded-lg border max-h-[400px] overflow-y-auto">
@@ -883,11 +885,11 @@ const ProjectDetail = () => {
                           <div className="space-y-3 pt-2">
                             <div className="flex items-center gap-2">
                               <div className="h-px flex-1 bg-border" />
-                              <span className="text-xs font-semibold text-muted-foreground uppercase">?섏젙 ?붿껌</span>
+                              <span className="text-xs font-semibold text-muted-foreground uppercase">수정 요청</span>
                               <div className="h-px flex-1 bg-border" />
                             </div>
                             <Textarea
-                              placeholder="???④퀎?먯꽌 ?섏젙?섍퀬 ?띠? ?댁슜??援ъ껜?곸쑝濡??낅젰?섏꽭??.."
+                              placeholder="이 단계에서 수정하고 싶은 내용을 구체적으로 입력하세요..."
                               value={feedback[stage.id] || ""}
                               onChange={(e) => setFeedback({ ...feedback, [stage.id]: e.target.value })}
                               className="min-h-[120px]"
@@ -901,12 +903,12 @@ const ProjectDetail = () => {
                               {processingStage === stage.id ? (
                                 <>
                                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  ?ъ깮??以?..
+                                  재생성 중...
                                 </>
                               ) : (
                                 <>
                                   <RefreshCw className="h-4 w-4 mr-2" />
-                                  ???④퀎 ?ъ깮??
+                                  이 단계 재생성
                                 </>
                               )}
                             </Button>
@@ -917,7 +919,7 @@ const ProjectDetail = () => {
                           <div className="pt-2">
                             <div className="flex items-center gap-2 mb-3">
                               <div className="h-px flex-1 bg-border" />
-                              <span className="text-xs font-semibold text-muted-foreground uppercase">?댁쟾 ?쇰뱶諛?/span>
+                              <span className="text-xs font-semibold text-muted-foreground uppercase">이전 피드백</span>
                               <div className="h-px flex-1 bg-border" />
                             </div>
                             <div className="bg-accent/20 p-4 rounded-lg border border-accent">
@@ -932,8 +934,7 @@ const ProjectDetail = () => {
               </div>
             )}
           </TabsContent>
-
-          {/* ?명룷洹몃옒??誘몃━蹂닿린 ??*/}
+          {/* 인포그래픽 미리보기 탭 */}
           <TabsContent value="infographic">
             <InfographicPreview
               title={project.title}
@@ -941,106 +942,101 @@ const ProjectDetail = () => {
               aiModel={project.ai_model}
               stages={stages}
               createdAt={project.created_at}
-              generatedContent={project.generated_content || undefined}
+              generatedContent={currentContent || undefined}
             />
           </TabsContent>
 
-          {/* 理쒖쥌 寃곌낵臾???*/}
+          {/* 최종 결과물 탭 */}
           <TabsContent value="final">
             <Card>
-              {(() => {
-                const currentAiResult = aiResults.find(r => r.ai_model === selectedAiModel);
-                const currentContent = currentAiResult?.generated_content || project.generated_content;
-                
-                return currentContent ? (
-                  <>
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <CardTitle className="text-2xl">理쒖쥌 ?앹꽦 寃곌낵臾?/CardTitle>
-                            <Badge variant="secondary">{selectedAiModel.toUpperCase()}</Badge>
-                          </div>
-                          <CardDescription>
-                            {selectedAiModel.toUpperCase()} 紐⑤뜽???앹꽦??理쒖쥌 肄섑뀗痢좎엯?덈떎
-                          </CardDescription>
+              {currentContent ? (
+                <>
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <CardTitle className="text-2xl">최종 생성 결과물</CardTitle>
+                          <Badge variant="secondary">{selectedAiModel.toUpperCase()}</Badge>
                         </div>
-                        <div className="flex gap-2 flex-wrap justify-end">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleShareLink}
-                            className="gap-2"
-                          >
-                            <Share2 className="h-4 w-4" />
-                            留곹겕 怨듭쑀
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleCopyToClipboard}
-                            className="gap-2"
-                          >
-                            <Copy className="h-4 w-4" />
-                            蹂듭궗
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleDownloadText}
-                            className="gap-2"
-                          >
-                            <Download className="h-4 w-4" />
-                            TXT
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleDownloadMarkdown}
-                            className="gap-2"
-                          >
-                            <Download className="h-4 w-4" />
-                            MD
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleDownloadPDF}
-                            className="gap-2"
-                          >
-                            <Download className="h-4 w-4" />
-                            PDF
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleDownloadPPT}
-                            className="gap-2"
-                          >
-                            <Download className="h-4 w-4" />
-                            PPT
-                          </Button>
-                        </div>
+                        <CardDescription>
+                          {selectedAiModel.toUpperCase()} 모델이 생성한 최종 콘텐츠입니다
+                        </CardDescription>
                       </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="bg-muted/50 p-6 rounded-lg border max-h-[600px] overflow-y-auto">
-                        <div className="prose prose-sm max-w-none dark:prose-invert">
-                          <p className="whitespace-pre-wrap leading-relaxed">{currentContent}</p>
-                        </div>
+                      <div className="flex gap-2 flex-wrap justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleShareLink}
+                          className="gap-2"
+                        >
+                          <Share2 className="h-4 w-4" />
+                          링크 공유
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleCopyToClipboard}
+                          className="gap-2"
+                        >
+                          <Copy className="h-4 w-4" />
+                          복사
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDownloadText}
+                          className="gap-2"
+                        >
+                          <Download className="h-4 w-4" />
+                          TXT
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDownloadMarkdown}
+                          className="gap-2"
+                        >
+                          <Download className="h-4 w-4" />
+                          MD
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDownloadPDF}
+                          className="gap-2"
+                        >
+                          <Download className="h-4 w-4" />
+                          PDF
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDownloadPPT}
+                          className="gap-2"
+                        >
+                          <Download className="h-4 w-4" />
+                          PPT
+                        </Button>
                       </div>
-                    </CardContent>
-                  </>
-                ) : (
-                  <CardContent className="flex flex-col items-center justify-center py-16">
-                    <Clock className="h-16 w-16 text-muted-foreground/30 mb-4" />
-                    <p className="text-lg font-semibold mb-2">理쒖쥌 寃곌낵臾쇱씠 ?꾩쭅 ?앹꽦?섏? ?딆븯?듬땲??/p>
-                    <p className="text-sm text-muted-foreground text-center max-w-md">
-                      紐⑤뱺 ?뚯씠?꾨씪???④퀎媛 ?꾨즺?섎㈃ 理쒖쥌 寃곌낵臾쇱씠 ?ш린???쒖떆?⑸땲??
-                    </p>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="bg-muted/50 p-6 rounded-lg border max-h-[600px] overflow-y-auto">
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                        <p className="whitespace-pre-wrap leading-relaxed">{currentContent}</p>
+                      </div>
+                    </div>
                   </CardContent>
-                );
-              })()}
+                </>
+              ) : (
+                <CardContent className="flex flex-col items-center justify-center py-16">
+                  <Clock className="h-16 w-16 text-muted-foreground/30 mb-4" />
+                  <p className="text-lg font-semibold mb-2">최종 결과물이 아직 생성되지 않았습니다</p>
+                  <p className="text-sm text-muted-foreground text-center max-w-md">
+                    모든 파이프라인 단계가 완료되면 최종 결과물이 여기에 표시됩니다
+                  </p>
+                </CardContent>
+              )}
             </Card>
           </TabsContent>
         </Tabs>
@@ -1050,4 +1046,3 @@ const ProjectDetail = () => {
 };
 
 export default ProjectDetail;
-
