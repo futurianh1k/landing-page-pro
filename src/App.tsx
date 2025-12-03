@@ -11,6 +11,7 @@ import ProjectCreate from "./pages/ProjectCreate";
 import ProjectDetail from "./pages/ProjectDetail";
 import Demo from "./pages/Demo";
 import NotFound from "./pages/NotFound";
+import ResetPassword from "./pages/ResetPassword";
 
 function App() {
   const [queryClient] = useState(() => new QueryClient({
@@ -34,6 +35,7 @@ function App() {
             <Route path="/project/create" element={<ProjectCreate />} />
             <Route path="/project/:id" element={<ProjectDetail />} />
             <Route path="/demo" element={<Demo />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

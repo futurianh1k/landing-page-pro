@@ -86,6 +86,46 @@ export const useAuth = () => {
     }
   };
 
+  const resetPassword = async (email: string) => {
+    try {
+      const redirectTo = `${window.location.origin}/reset-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo,
+      });
+      if (error) throw error;
+      toast({
+        title: "비밀번호 재설정 메일 발송",
+        description: "이메일을 확인하고 안내에 따라 재설정해 주세요.",
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '비밀번호 재설정 메일 발송 중 오류가 발생했습니다.';
+      toast({
+        title: "메일 발송 실패",
+        description: message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const updatePassword = async (password: string) => {
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      toast({
+        title: "비밀번호 변경 완료",
+        description: "새 비밀번호로 다시 로그인해 주세요.",
+      });
+      navigate('/auth');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '비밀번호 변경 중 오류가 발생했습니다.';
+      toast({
+        title: "비밀번호 변경 실패",
+        description: message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const signInWithGoogle = async () => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -132,6 +172,8 @@ export const useAuth = () => {
     loading,
     signUp,
     signIn,
+    resetPassword,
+    updatePassword,
     signInWithGoogle,
     signOut,
   };
