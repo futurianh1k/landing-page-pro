@@ -10,6 +10,8 @@ import Dashboard from "./pages/Dashboard";
 import ProjectCreate from "./pages/ProjectCreate";
 import ProjectDetail from "./pages/ProjectDetail";
 import Demo from "./pages/Demo";
+import CourseView from "./pages/CourseView";
+import CourseFeedbackPage from "./pages/CourseFeedbackPage";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 
@@ -36,6 +38,8 @@ function App() {
             <Route path="/project/:id" element={<ProjectDetail />} />
             <Route path="/demo" element={<Demo />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/course/:id" element={<CourseView />} />
+            <Route path="/course/:id/feedback" element={<CourseFeedbackPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
