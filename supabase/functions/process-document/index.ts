@@ -380,7 +380,7 @@ serve(async (req) => {
     }
 
     // 이전 단계 콘텐츠 누적 저장
-    let previousContents: string[] = [];
+    const previousContents: string[] = [];
     let successCount = 0;
     let failCount = 0;
 
