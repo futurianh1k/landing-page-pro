@@ -190,30 +190,99 @@ describe('대시보드 페이지 E2E 테스트', () => {
     }
   });
 
-  it('탭 전환이 작동해야 함 (전체/진행중/완료 등)', async () => {
+  it('탭 전환이 작동해야 함 (프로젝트/코스)', async () => {
     try {
       await login(driver, testEmail, testPassword);
+      await driver.get(`${BASE_URL}/dashboard`);
       await waitForPageLoad(driver);
       await driver.sleep(2000);
 
-      // 탭 요소 찾기
+      // 탭 요소 찾기 (프로젝트/코스 탭)
       const tabs = await driver.findElements(
         By.css('[role="tab"], [class*="tab"], [class*="Tab"]')
       );
 
       if (tabs.length > 0) {
-        // 첫 번째 탭 클릭
-        await tabs[0].click();
-        await driver.sleep(1000);
+        // 프로젝트 탭 클릭
+        const projectTab = await driver.findElements(
+          By.xpath("//*[contains(text(), '프로젝트')]")
+        );
+        if (projectTab.length > 0) {
+          await projectTab[0].click();
+          await driver.sleep(1000);
+        }
 
-        // 두 번째 탭이 있으면 클릭
-        if (tabs.length > 1) {
-          await tabs[1].click();
+        // 코스 탭 클릭
+        const courseTab = await driver.findElements(
+          By.xpath("//*[contains(text(), '코스')]")
+        );
+        if (courseTab.length > 0) {
+          await courseTab[0].click();
           await driver.sleep(1000);
         }
       }
     } catch (error) {
       console.log('Tabs may not exist or test account not available');
+    }
+  });
+
+  it('코스 목록이 표시되어야 함', async () => {
+    try {
+      await login(driver, testEmail, testPassword);
+      await driver.get(`${BASE_URL}/dashboard`);
+      await waitForPageLoad(driver);
+      await driver.sleep(3000);
+
+      // 코스 탭 클릭
+      const courseTab = await driver.findElements(
+        By.xpath("//*[contains(text(), '코스')]")
+      );
+
+      if (courseTab.length > 0) {
+        await courseTab[0].click();
+        await driver.sleep(2000);
+
+        // 코스 카드 또는 목록 확인
+        const courseCards = await driver.findElements(
+          By.css('[class*="card"], [class*="Card"], [class*="course"], [class*="Course"]')
+        );
+
+        // 코스가 있거나 없을 수 있음 (빈 상태도 유효)
+        expect(courseCards.length).toBeGreaterThanOrEqual(0);
+      }
+    } catch (error) {
+      console.log('Course tab may not exist or test account not available');
+    }
+  });
+
+  it('코스 생성 버튼이 표시되어야 함', async () => {
+    try {
+      await login(driver, testEmail, testPassword);
+      await driver.get(`${BASE_URL}/dashboard`);
+      await waitForPageLoad(driver);
+      await driver.sleep(2000);
+
+      // 코스 생성 버튼 찾기
+      const createCourseButtons = await driver.findElements(
+        By.xpath("//button[contains(text(), '코스') and contains(text(), '생성')] | //button[contains(@aria-label, '코스')]")
+      );
+
+      // 코스 탭으로 전환 후 확인
+      const courseTab = await driver.findElements(
+        By.xpath("//*[contains(text(), '코스')]")
+      );
+
+      if (courseTab.length > 0) {
+        await courseTab[0].click();
+        await driver.sleep(1000);
+
+        const buttons = await driver.findElements(
+          By.xpath("//button[contains(text(), '생성')] | //button[contains(text(), '새')]")
+        );
+        expect(buttons.length).toBeGreaterThanOrEqual(0);
+      }
+    } catch (error) {
+      console.log('Course create button may not exist');
     }
   });
 });

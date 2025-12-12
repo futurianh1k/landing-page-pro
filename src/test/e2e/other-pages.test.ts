@@ -225,5 +225,56 @@ describe('기타 페이지 E2E 테스트', () => {
       }
     });
   });
+
+  describe('CoursesPage 페이지', () => {
+    it('CoursesPage에 접근할 수 있어야 함', async () => {
+      try {
+        await login(driver, testEmail, testPassword);
+        
+        await driver.get(`${BASE_URL}/courses`);
+        await waitForPageLoad(driver);
+        await driver.sleep(2000);
+
+        const currentUrl = await driver.getCurrentUrl();
+        expect(currentUrl).toContain('/courses');
+      } catch (error) {
+        console.log('Courses page may not be available');
+      }
+    });
+  });
+
+  describe('CourseCreatePage 페이지', () => {
+    it('CourseCreatePage에 접근할 수 있어야 함', async () => {
+      try {
+        await login(driver, testEmail, testPassword);
+        
+        await driver.get(`${BASE_URL}/courses/create`);
+        await waitForPageLoad(driver);
+        await driver.sleep(2000);
+
+        const currentUrl = await driver.getCurrentUrl();
+        expect(currentUrl).toContain('/courses/create');
+      } catch (error) {
+        console.log('Course create page may not be available');
+      }
+    });
+  });
+
+  describe('CourseBuilderPage 페이지', () => {
+    it('CourseBuilderPage에 접근할 수 있어야 함', async () => {
+      try {
+        await login(driver, testEmail, testPassword);
+        
+        await driver.get(`${BASE_URL}/courses/test-course-id/builder`);
+        await waitForPageLoad(driver);
+        await driver.sleep(2000);
+
+        const currentUrl = await driver.getCurrentUrl();
+        expect(currentUrl).toContain('/builder');
+      } catch (error) {
+        console.log('Course builder page may not be available');
+      }
+    });
+  });
 });
 

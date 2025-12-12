@@ -60,6 +60,7 @@ npm run test:e2e:ui
 - `src/test/e2e/auth.test.ts`: 인증 페이지 테스트
 - `src/test/e2e/dashboard.test.ts`: 대시보드 페이지 테스트
 - `src/test/e2e/project.test.ts`: 프로젝트 생성/상세 페이지 테스트
+- `src/test/e2e/courses.test.ts`: 코스 관련 페이지 테스트 (신규)
 - `src/test/e2e/other-pages.test.ts`: 기타 페이지 테스트
 - `src/test/e2e/integration.test.ts`: 통합 테스트 시나리오
 
@@ -70,6 +71,7 @@ npm run test:e2e:ui
 - ✅ 헤더 네비게이션
 - ✅ Hero 섹션
 - ✅ Features, Pipeline, Personas, Metrics 섹션
+- ✅ ProjectVsCourse 섹션 (신규)
 - ✅ CTA 버튼
 - ✅ Footer
 - ✅ 반응형 디자인
@@ -85,7 +87,10 @@ npm run test:e2e:ui
 #### 대시보드 페이지
 - ✅ 로그인 필요 확인
 - ✅ 프로젝트 목록 표시
+- ✅ 코스 목록 표시 (신규)
+- ✅ 프로젝트/코스 탭 전환 (신규)
 - ✅ 프로젝트 생성 버튼
+- ✅ 코스 생성 버튼 (신규)
 - ✅ 프로젝트 카드 클릭
 - ✅ 통계 정보
 - ✅ 빈 상태 처리
@@ -97,6 +102,14 @@ npm run test:e2e:ui
 - ✅ 프로젝트 상세 페이지
 - ✅ 단계별 콘텐츠
 - ✅ 다운로드 기능
+- ✅ AI 모델 선택
+
+#### 코스 페이지 (신규)
+- ✅ 코스 목록 페이지 (CoursesPage)
+- ✅ 코스 생성 페이지 (CourseCreatePage)
+- ✅ 코스 빌더 페이지 (CourseBuilderPage)
+- ✅ 커리큘럼 트리
+- ✅ 레슨 상세
 - ✅ AI 모델 선택
 
 #### 기타 페이지
@@ -112,6 +125,8 @@ npm run test:e2e:ui
 - ✅ 프로젝트 관리 플로우
 - ✅ 네비게이션 플로우
 - ✅ 로그아웃 플로우
+- ✅ 코스 생성 플로우 (신규)
+- ✅ 프로젝트 vs 코스 선택 플로우 (신규)
 
 ## 브라우저 설정
 

@@ -162,6 +162,64 @@ describe('랜딩 페이지 (Index) E2E 테스트', () => {
     }
   });
 
+  it('ProjectVsCourse 섹션이 표시되어야 함', async () => {
+    await driver.get(BASE_URL);
+    await waitForPageLoad(driver);
+
+    // ProjectVsCourse 섹션 찾기
+    const projectVsCourseSection = await driver.findElements(
+      By.xpath("//*[contains(text(), '프로젝트와 코스') or contains(text(), '어떻게 시작할까요')]")
+    );
+
+    if (projectVsCourseSection.length > 0) {
+      await scrollToElement(driver, projectVsCourseSection[0]);
+      await driver.sleep(500);
+      expect(await projectVsCourseSection[0].isDisplayed()).toBe(true);
+    }
+  });
+
+  it('ProjectVsCourse에서 프로젝트 생성 버튼이 작동해야 함', async () => {
+    await driver.get(BASE_URL);
+    await waitForPageLoad(driver);
+    await driver.sleep(1000);
+
+    // 프로젝트 생성 버튼 찾기
+    const projectButtons = await driver.findElements(
+      By.xpath("//button[contains(text(), '프로젝트 생성')] | //a[contains(text(), '프로젝트 생성')]")
+    );
+
+    if (projectButtons.length > 0) {
+      await scrollToElement(driver, projectButtons[0]);
+      await projectButtons[0].click();
+      await driver.sleep(2000);
+
+      // 로그인 페이지 또는 프로젝트 생성 페이지로 이동 확인
+      const currentUrl = await driver.getCurrentUrl();
+      expect(currentUrl).toMatch(/\/auth|\/project\/create/);
+    }
+  });
+
+  it('ProjectVsCourse에서 코스 생성 버튼이 작동해야 함', async () => {
+    await driver.get(BASE_URL);
+    await waitForPageLoad(driver);
+    await driver.sleep(1000);
+
+    // 코스 생성 버튼 찾기
+    const courseButtons = await driver.findElements(
+      By.xpath("//button[contains(text(), '코스 생성')] | //a[contains(text(), '코스 생성')]")
+    );
+
+    if (courseButtons.length > 0) {
+      await scrollToElement(driver, courseButtons[0]);
+      await courseButtons[0].click();
+      await driver.sleep(2000);
+
+      // 로그인 페이지 또는 코스 생성 페이지로 이동 확인
+      const currentUrl = await driver.getCurrentUrl();
+      expect(currentUrl).toMatch(/\/auth|\/courses\/create/);
+    }
+  });
+
   it('반응형 디자인이 작동해야 함 (모바일 뷰)', async () => {
     await driver.get(BASE_URL);
     await waitForPageLoad(driver);
