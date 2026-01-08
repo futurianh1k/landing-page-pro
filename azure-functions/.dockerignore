@@ -14,14 +14,19 @@ tsconfig.json
 local.settings.json
 .env
 .env.*
+.env.local
 
 # 테스트
 *.test.ts
 *.spec.ts
 __tests__
+coverage
 
 # 기타
 *.md
 *.zip
+*.log
 .git
 .gitignore
+.DS_Store
+deploy.zip
