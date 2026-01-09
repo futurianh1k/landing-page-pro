@@ -237,7 +237,7 @@ export async function generateCurriculum(
 
     return {
       status: 500,
-      jsonBody: { error: error.message || '커리큘럼 생성 중 오류가 발생했습니다.' },
+      jsonBody: { error: errorMessage || '커리큘럼 생성 중 오류가 발생했습니다.' },
     };
   }
 }
