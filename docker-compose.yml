@@ -19,6 +19,29 @@ services:
     networks:
       - landing-page-pro-network
 
+  # One-shot DB Migration (postgres healthy 후 migration.sql을 psql로 적용)
+  # - 목적: 새 환경/빈 볼륨에서도 `docker compose up -d`만으로 스키마 자동 생성
+  # - 주의: 실행 후 컨테이너는 Exited 상태가 정상입니다(1회 실행)
+  db-migrate:
+    image: postgres:15-alpine
+    container_name: landing-page-pro-db-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - ./db/migration.sql:/migrations/migration.sql:ro
+    command: >
+      sh -c "
+        echo '[db-migrate] applying migration.sql...';
+        psql -h postgres -U ${POSTGRES_USER:-pgadmin} -d ${POSTGRES_DB:-landingpagepro} -v ON_ERROR_STOP=1 -f /migrations/migration.sql;
+        echo '[db-migrate] done';
+      "
+    restart: "no"
+    networks:
+      - landing-page-pro-network
+
   # Azurite (로컬 Azure Storage 에뮬레이터)
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite
@@ -73,6 +96,8 @@ services:
         condition: service_healthy
       azurite:
         condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
     networks:
       - landing-page-pro-network
 
