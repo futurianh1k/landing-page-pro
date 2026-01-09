@@ -34,6 +34,72 @@ function safeJsonParse<T>(value: any): T | null {
   }
 }
 
+function normalizeSources(sources: any[]): Array<{ title?: string; url: string }> {
+  const out: Array<{ title?: string; url: string }> = [];
+  for (const s of sources || []) {
+    const url = s?.url;
+    if (typeof url !== 'string' || !url.trim()) continue;
+    const title = typeof s?.title === 'string' ? s.title : undefined;
+    out.push({ title, url: url.trim() });
+  }
+  // url 기준 dedupe
+  const seen = new Set<string>();
+  return out.filter((s) => {
+    if (seen.has(s.url)) return false;
+    seen.add(s.url);
+    return true;
+  });
+}
+
+function ensureSourcesSectionMarkdown(md: string, sources: Array<{ title?: string; url: string }>): string {
+  const hasSourcesHeader = /\n##\s*Sources\s*\n/i.test(md) || /\n##\s*출처\s*\n/i.test(md);
+  if (hasSourcesHeader) return md;
+
+  const lines =
+    sources.length > 0
+      ? sources.map((s, i) => `- [${i + 1}] ${s.title ? `${s.title} - ` : ''}${s.url}`)
+      : ['- (웹 검색 결과가 없습니다. `TAVILY_API_KEY` 또는 `SERPER_API_KEY` 설정을 확인하세요.)'];
+
+  return `${md.trim()}\n\n## Sources\n${lines.join('\n')}\n`;
+}
+
+function enforceSlideCitations(slidesJson: any, sources: Array<{ title?: string; url: string }>): any {
+  if (!slidesJson || typeof slidesJson !== 'object') return slidesJson;
+  const slides = Array.isArray(slidesJson.slides) ? slidesJson.slides : [];
+  if (!slides.length) return slidesJson;
+
+  // sources가 있으면 최소 [1]은 speakerNotes에 들어가도록 보강
+  if (sources.length > 0) {
+    for (const slide of slides) {
+      if (!slide || typeof slide !== 'object') continue;
+      const notes = typeof slide.speakerNotes === 'string' ? slide.speakerNotes : '';
+      const hasCitation = /\[\d+\]/.test(notes);
+      if (!hasCitation) {
+        slide.speakerNotes = `${notes ? `${notes}\n\n` : ''}Sources: [1]`;
+      }
+    }
+    // 덱 레벨 sources도 추가(있으면 유지)
+    if (!Array.isArray(slidesJson.sources)) {
+      slidesJson.sources = sources.map((s, i) => ({ id: i + 1, title: s.title, url: s.url }));
+    }
+  } else {
+    // sources가 없으면 speakerNotes에 "출처 없음" 안내를 남깁니다.
+    for (const slide of slides) {
+      if (!slide || typeof slide !== 'object') continue;
+      const notes = typeof slide.speakerNotes === 'string' ? slide.speakerNotes : '';
+      const hasSourcesLine = /Sources\s*:/i.test(notes);
+      if (!hasSourcesLine) {
+        slide.speakerNotes = `${notes ? `${notes}\n\n` : ''}Sources: (웹 검색 결과 없음 - TAVILY_API_KEY/SERPER_API_KEY 미설정 가능)`;
+      }
+    }
+    if (!Array.isArray(slidesJson.sources)) {
+      slidesJson.sources = [];
+    }
+  }
+
+  return slidesJson;
+}
+
 async function runStep(
   stepType: GenerationStepType,
   aiModel: 'gemini' | 'claude' | 'chatgpt',
@@ -113,16 +179,24 @@ async function runStep(
   }
 
   if (stepType === 'generate_document') {
-    const system = `당신은 교육 콘텐츠 기획자입니다. 사용자의 입력을 바탕으로 '강의안(문서)'을 한국어로 작성하세요.`;
-    const sources = contextState.web?.results?.length ? contextState.web.results.slice(0, 6) : [];
-    const sourcesBlock = sources.length
-      ? `\n\n참고 출처(가능하면 본문에 [1], [2] 형태로 인용하고, 마지막에 Sources 섹션으로 URL을 나열):\n${sources
-          .map((s, i) => `[${i + 1}] ${s.title} - ${s.url}`)
-          .join('\n')}\n`
-      : '';
+    const sources = normalizeSources(contextState.web?.results || []).slice(0, 8);
 
-    const prompt = `사용자 입력:\n${documentContent}\n\n요구사항:\n- 목차(요약) + 본문\n- 5회차 구성(회차별 목표/시간/활동)\n- 안전/주의사항(특히 시니어 대상이면 강조)\n\n형식: Markdown${sourcesBlock}`;
-    const md = await generateContent(aiModel, prompt, system);
+    const system = `당신은 교육 콘텐츠 기획자입니다. 사용자의 입력을 바탕으로 '강의안(문서)'을 한국어로 작성하세요.
+반드시 다음 규칙을 지키세요:
+- 웹 검색 출처가 주어지면, 최신/사실 주장에는 본문에 [1], [2] 형태로 인용을 포함해야 합니다.
+- 문서 마지막에 반드시 "## Sources" 섹션을 만들고, 제공된 출처만 [n] 번호로 나열하세요(임의 출처 생성 금지).
+- 제공된 출처가 없으면 "## Sources" 섹션에 웹 검색 미설정 안내를 남기세요.`;
+
+    const sourcesBlock =
+      sources.length > 0
+        ? `\n\n[출처 목록 - 제공된 URL만 사용, 새 URL 생성 금지]\n${sources
+            .map((s, i) => `[${i + 1}] ${s.title ? `${s.title} - ` : ''}${s.url}`)
+            .join('\n')}\n`
+        : `\n\n[출처 목록]\n(없음)\n`;
+
+    const prompt = `사용자 입력:\n${documentContent}\n\n요구사항:\n- 목차(요약) + 본문\n- 5회차 구성(회차별 목표/시간/활동)\n- 안전/주의사항(특히 시니어 대상이면 강조)\n- 문서 말미에 Sources 섹션 필수\n\n형식: Markdown${sourcesBlock}`;
+    let md = await generateContent(aiModel, prompt, system);
+    md = ensureSourcesSectionMarkdown(md, sources);
     return {
       log: '강의안(문서) 생성 완료',
       artifacts: [{ type: 'document', contentText: md, markCompleted: true }],
@@ -144,13 +218,24 @@ async function runStep(
   }
 
   if (stepType === 'generate_slides') {
-    const system = `당신은 교안 슬라이드 설계자입니다. 사용자의 입력을 바탕으로 슬라이드 덱 구조 JSON을 작성하세요. JSON만 반환하세요.`;
-    const sources = contextState.web?.results?.length ? contextState.web.results.slice(0, 6) : [];
-    const prompt = `사용자 입력:\n${documentContent}\n\n가능하면 아래 출처를 참고하여 최신 트렌드 키워드를 반영하세요(슬라이드 speakerNotes에 [1] 같은 참조를 남겨도 됩니다):\n${sources
-      .map((s, i) => `[${i + 1}] ${s.url}`)
-      .join('\n')}\n\nJSON 스키마:\n{\n  \"deckTitle\": \"...\",\n  \"slides\": [\n    {\"title\":\"...\",\"bullets\":[\"...\"],\"speakerNotes\":\"...\",\"visualHint\":\"...\"}\n  ]\n}`;
+    const sources = normalizeSources(contextState.web?.results || []).slice(0, 8);
+
+    const system = `당신은 교안 슬라이드 설계자입니다. 사용자의 입력을 바탕으로 슬라이드 덱 구조 JSON을 작성하세요. JSON만 반환하세요.
+반드시 다음 규칙을 지키세요:
+- 출처가 주어지면, 각 슬라이드의 speakerNotes에 최소 1개 이상의 [n] 인용을 포함하세요.
+- 제공된 출처 번호([1]..[n])만 사용하세요. 임의 출처 번호 생성 금지.
+- JSON은 반드시 파싱 가능한 형태로만 출력하세요.`;
+
+    const sourcesBlock =
+      sources.length > 0
+        ? `\n\n[출처 목록 - 제공된 URL만 사용]\n${sources.map((s, i) => `[${i + 1}] ${s.url}`).join('\n')}\n`
+        : `\n\n[출처 목록]\n(없음)\n`;
+
+    const prompt = `사용자 입력:\n${documentContent}\n\n요구사항:\n- 슬라이드 6~10장\n- 각 슬라이드는 title/bullets/speakerNotes/visualHint 포함\n- speakerNotes에 출처 인용([n]) 포함 (출처가 있을 때)\n\nJSON 스키마:\n{\n  \"deckTitle\": \"...\",\n  \"slides\": [\n    {\"title\":\"...\",\"bullets\":[\"...\"],\"speakerNotes\":\"...\",\"visualHint\":\"...\"}\n  ]\n}\n${sourcesBlock}`;
+
     const text = await generateContent(aiModel, prompt, system);
-    const json = safeJsonParse<any>(text) ?? { raw: text };
+    let json = safeJsonParse<any>(text) ?? { raw: text };
+    json = enforceSlideCitations(json, sources);
     return {
       log: '슬라이드 설계 생성 완료',
       artifacts: [{ type: 'slides', contentJson: json, markCompleted: true }],
