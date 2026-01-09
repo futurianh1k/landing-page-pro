@@ -206,6 +206,98 @@ CREATE INDEX IF NOT EXISTS idx_course_feedbacks_project_id ON course_feedbacks(p
 CREATE INDEX IF NOT EXISTS idx_course_feedbacks_user_id ON course_feedbacks(user_id);
 
 -- ========================================================
+-- 2.9 generation_jobs / steps / artifacts (Agent 기반 생성 오케스트레이션)
+-- ========================================================
+
+-- generation_jobs: 프로젝트 단위 생성 작업(선택 산출물/옵션 포함)
+CREATE TABLE IF NOT EXISTS generation_jobs (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  project_id UUID NOT NULL,
+  user_id UUID NOT NULL,
+  ai_model VARCHAR(50) NOT NULL DEFAULT 'gemini',
+  requested_outputs JSONB NOT NULL DEFAULT '{}'::jsonb,
+  options JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status VARCHAR(20) NOT NULL DEFAULT 'queued',
+  current_step_index INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DO $$ BEGIN
+  ALTER TABLE generation_jobs ADD CONSTRAINT fk_generation_jobs_project_id
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE generation_jobs ADD CONSTRAINT fk_generation_jobs_user_id
+    FOREIGN KEY (user_id) REFERENCES profiles(user_id) ON DELETE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_generation_jobs_project_id ON generation_jobs(project_id);
+CREATE INDEX IF NOT EXISTS idx_generation_jobs_user_id ON generation_jobs(user_id);
+CREATE INDEX IF NOT EXISTS idx_generation_jobs_status ON generation_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_generation_jobs_created_at ON generation_jobs(created_at DESC);
+
+-- generation_steps: 생성 작업의 단계별 진행/로그/입출력
+CREATE TABLE IF NOT EXISTS generation_steps (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  job_id UUID NOT NULL,
+  step_type VARCHAR(50) NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  order_index INTEGER NOT NULL,
+  input JSONB,
+  output JSONB,
+  log TEXT,
+  error TEXT,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT uq_generation_steps_job_order UNIQUE (job_id, order_index)
+);
+
+DO $$ BEGIN
+  ALTER TABLE generation_steps ADD CONSTRAINT fk_generation_steps_job_id
+    FOREIGN KEY (job_id) REFERENCES generation_jobs(id) ON DELETE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_generation_steps_job_id ON generation_steps(job_id);
+CREATE INDEX IF NOT EXISTS idx_generation_steps_status ON generation_steps(status);
+CREATE INDEX IF NOT EXISTS idx_generation_steps_order ON generation_steps(job_id, order_index);
+
+-- generation_artifacts: 산출물(강의안/인포그래픽/슬라이드) 저장
+CREATE TABLE IF NOT EXISTS generation_artifacts (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  job_id UUID NOT NULL,
+  artifact_type VARCHAR(30) NOT NULL, -- 'document' | 'infographic' | 'slides'
+  status VARCHAR(20) NOT NULL DEFAULT 'draft',
+  content_text TEXT,
+  content_json JSONB,
+  assets JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT uq_generation_artifacts_job_type UNIQUE (job_id, artifact_type)
+);
+
+DO $$ BEGIN
+  ALTER TABLE generation_artifacts ADD CONSTRAINT fk_generation_artifacts_job_id
+    FOREIGN KEY (job_id) REFERENCES generation_jobs(id) ON DELETE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_generation_artifacts_job_id ON generation_artifacts(job_id);
+CREATE INDEX IF NOT EXISTS idx_generation_artifacts_type ON generation_artifacts(artifact_type);
+
+-- ========================================================
 -- 3. COURSE BUILDER TABLES
 -- ========================================================
 
@@ -320,6 +412,15 @@ CREATE TRIGGER trg_course_modules_updated_at BEFORE UPDATE ON course_modules FOR
 
 DROP TRIGGER IF EXISTS trg_lessons_updated_at ON lessons;
 CREATE TRIGGER trg_lessons_updated_at BEFORE UPDATE ON lessons FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS trg_generation_jobs_updated_at ON generation_jobs;
+CREATE TRIGGER trg_generation_jobs_updated_at BEFORE UPDATE ON generation_jobs FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS trg_generation_steps_updated_at ON generation_steps;
+CREATE TRIGGER trg_generation_steps_updated_at BEFORE UPDATE ON generation_steps FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS trg_generation_artifacts_updated_at ON generation_artifacts;
+CREATE TRIGGER trg_generation_artifacts_updated_at BEFORE UPDATE ON generation_artifacts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Helper function: Check if user has role
 CREATE OR REPLACE FUNCTION has_role(_user_id UUID, _role app_role)
