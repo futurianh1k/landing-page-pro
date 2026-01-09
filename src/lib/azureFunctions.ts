@@ -90,6 +90,19 @@ async function callAzureFunction<T = any>(
 
     if (accessToken) {
       headers['Authorization'] = `Bearer ${accessToken}`;
+    } else {
+      // 개발 환경에서만 허용되는 Auth Bypass (로컬 테스트 편의)
+      if (import.meta.env.VITE_DEV_AUTH_BYPASS === 'true') {
+        const key = 'dev_auth_user_id';
+        let userId = localStorage.getItem(key);
+        if (!userId) {
+          userId = crypto.randomUUID();
+          localStorage.setItem(key, userId);
+        }
+        headers['x-dev-user-id'] = userId;
+        headers['x-dev-email'] = 'dev@example.com';
+        headers['x-dev-name'] = 'Dev User';
+      }
     }
 
     const options: RequestInit = {
@@ -156,6 +169,101 @@ export async function processDocument(
     '/api/processDocument',
     'POST',
     request
+  );
+}
+
+// ============================================================
+// Agent Orchestration (Generation Job)
+// ============================================================
+
+export type GenerationOutputType = 'document' | 'infographic' | 'slides';
+
+export interface StartGenerationJobRequest {
+  projectId: string;
+  documentContent: string;
+  aiModel: 'gemini' | 'claude' | 'chatgpt';
+  outputs: {
+    document: boolean;
+    infographic: boolean;
+    slides: boolean;
+  };
+  options?: {
+    enableWebSearch?: boolean;
+    enableImageGeneration?: boolean;
+  };
+}
+
+export interface StartGenerationJobResponse {
+  success: boolean;
+  jobId: string;
+}
+
+export async function startGenerationJob(
+  request: StartGenerationJobRequest
+): Promise<{ data: StartGenerationJobResponse | null; error: Error | null }> {
+  return callAzureFunction<StartGenerationJobResponse>(
+    '/api/generation/start',
+    'POST',
+    request
+  );
+}
+
+export interface GenerationJobDto {
+  id: string;
+  project_id: string;
+  user_id: string;
+  ai_model: string;
+  requested_outputs: any;
+  options: any;
+  status: string;
+  current_step_index: number;
+  error?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GenerationStepDto {
+  id: string;
+  job_id: string;
+  step_type: string;
+  title: string;
+  status: string;
+  order_index: number;
+  input?: any;
+  output?: any;
+  log?: string;
+  error?: string;
+  started_at?: string;
+  completed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GenerationArtifactDto {
+  id: string;
+  job_id: string;
+  artifact_type: GenerationOutputType;
+  status: string;
+  content_text?: string;
+  content_json?: any;
+  assets?: any;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GetGenerationJobResponse {
+  success: boolean;
+  job: GenerationJobDto | null;
+  steps: GenerationStepDto[];
+  artifacts: GenerationArtifactDto[];
+}
+
+export async function getGenerationJob(
+  projectId: string
+): Promise<{ data: GetGenerationJobResponse | null; error: Error | null }> {
+  return callAzureFunction<GetGenerationJobResponse>(
+    `/api/generation/job/${projectId}`,
+    'GET'
   );
 }
 

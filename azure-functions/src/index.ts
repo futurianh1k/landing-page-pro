@@ -40,3 +40,8 @@ import './functions/feedbackApi';
 
 // Migrations
 import './functions/addAiModelColumn';
+
+// Agent Orchestration (Jobs/Queue)
+import './functions/startGenerationJob';
+import './functions/getGenerationJob';
+import './functions/generationJobWorker';
