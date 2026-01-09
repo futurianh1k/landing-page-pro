@@ -8,6 +8,18 @@ import { apiRequest } from '@/config/authConfig';
 import { buildAzureFunctionsUrl } from '@/lib/azureFunctionsUrl';
 
 const AZURE_FUNCTIONS_URL = import.meta.env.VITE_AZURE_FUNCTIONS_URL || 'http://localhost:7071';
+const DEBUG_AZURE_FUNCTIONS = import.meta.env.VITE_DEBUG_AZURE_FUNCTIONS === 'true';
+
+function redactUrl(rawUrl: string): string {
+  try {
+    const u = new URL(rawUrl);
+    // Mask all query param values (e.g. code=, tokens, etc.)
+    u.searchParams.forEach((_v, k) => u.searchParams.set(k, '***'));
+    return u.toString();
+  } catch {
+    return rawUrl;
+  }
+}
 
 // Token cache to prevent repeated token acquisition
 let cachedToken: string | null = null;
@@ -85,6 +97,9 @@ async function callAzureFunction<T = any>(
     const accessToken = await getAccessToken();
 
     const url = buildAzureFunctionsUrl(AZURE_FUNCTIONS_URL, endpoint);
+    if (DEBUG_AZURE_FUNCTIONS) {
+      console.debug(`[AzureFunctions] Request: ${method} ${redactUrl(url)} (endpoint=${endpoint})`);
+    }
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
     };
@@ -119,7 +134,13 @@ async function callAzureFunction<T = any>(
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Azure Function error: ${response.status} ${errorText}`);
+      const snippet = (errorText || '').slice(0, 800);
+      const msg = `Azure Function error: ${response.status} (url=${redactUrl(url)}) ${snippet}`;
+      if (DEBUG_AZURE_FUNCTIONS) {
+        console.error(`[AzureFunctions] HTTP ${response.status} for ${redactUrl(url)}`);
+        if (snippet) console.error(`[AzureFunctions] Response (first 800 chars):\n${snippet}`);
+      }
+      throw new Error(msg);
     }
 
     const data = await response.json();
@@ -378,6 +399,9 @@ export async function callAzureFunctionUnauthenticated<T = any>(
 ): Promise<{ data: T | null; error: Error | null }> {
   try {
     const url = buildAzureFunctionsUrl(AZURE_FUNCTIONS_URL, endpoint);
+    if (DEBUG_AZURE_FUNCTIONS) {
+      console.debug(`[AzureFunctions] Unauth Request: ${method} ${redactUrl(url)} (endpoint=${endpoint})`);
+    }
     const options: RequestInit = {
       method,
       headers: {
@@ -393,11 +417,15 @@ export async function callAzureFunctionUnauthenticated<T = any>(
 
     if (!response.ok) {
       const errorText = await response.text();
-      const error = new Error(`Azure Function error: ${response.status} ${errorText}`);
+      const snippet = (errorText || '').slice(0, 800);
+      const error = new Error(`Azure Function error: ${response.status} (url=${redactUrl(url)}) ${snippet}`);
 
       // 401 오류는 예상된 동작이므로 콘솔에 로그하지 않음
       if (response.status !== 401) {
         console.error(`[AzureFunctions] Error calling ${endpoint}:`, error);
+        if (DEBUG_AZURE_FUNCTIONS && snippet) {
+          console.error(`[AzureFunctions] Response (first 800 chars):\n${snippet}`);
+        }
       }
 
       throw error;
