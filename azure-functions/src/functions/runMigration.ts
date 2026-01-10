@@ -30,14 +30,15 @@ export async function runMigration(
         message: 'Migration completed',
       },
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     context.error('[Migration] Failed to run migration:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
 
     return {
       status: 500,
       jsonBody: {
         success: false,
-        error: error.message,
+        error: errorMessage,
       },
     };
   }
