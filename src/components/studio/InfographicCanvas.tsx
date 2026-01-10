@@ -94,7 +94,7 @@ export function InfographicCanvas({
 
     function drawContent() {
       const pad = 34;
-      let x = pad;
+      const x = pad;
       let y = pad + 10;
       const maxW = width - pad * 2;
 

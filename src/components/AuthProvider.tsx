@@ -32,16 +32,19 @@ interface AuthProviderProps {
  * App.tsx에서 최상위에 배치
  */
 export function AuthProvider({ children }: AuthProviderProps) {
-  // 로컬 개발 편의: Entra 설정 없이도 UI를 확인할 수 있도록 bypass 지원
-  // (API 호출은 프론트에서 x-dev-user-id 헤더로 동작)
-  if (import.meta.env.VITE_DEV_AUTH_BYPASS === 'true') {
-    return <MsalProvider instance={msalInstance}>{children}</MsalProvider>;
-  }
-
+  // React Hooks must be called unconditionally at the top level
   const [isInitialized, setIsInitialized] = useState(false);
   const initializingRef = useRef(false);
+  
+  // 로컬 개발 편의: Entra 설정 없이도 UI를 확인할 수 있도록 bypass 지원
+  const devBypass = import.meta.env.VITE_DEV_AUTH_BYPASS === 'true';
 
   useEffect(() => {
+    // DEV bypass 모드에서는 초기화 스킵
+    if (devBypass) {
+      setIsInitialized(true);
+      return;
+    }
     // 이미 초기화 중이거나 완료되었으면 스킵
     if (initializingRef.current || isInitialized) {
       console.log('[AuthProvider] Already initializing or initialized, skipping...');
@@ -88,7 +91,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       console.error('[AuthProvider] MSAL initialization failed:', error);
       initializingRef.current = false;
     });
-  }, [isInitialized]);
+  }, [isInitialized, devBypass]);
 
   if (!isInitialized) {
     console.log('[AuthProvider] Waiting for MSAL initialization...');
