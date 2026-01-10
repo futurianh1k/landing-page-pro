@@ -47,20 +47,27 @@ services:
     image: mcr.microsoft.com/azure-storage/azurite
     container_name: landing-page-pro-azurite
     ports:
-      - "10000:10000"  # Blob
-      - "10001:10001"  # Queue
-      - "10002:10002"  # Table
-    volumes:
-      - azurite_data:/data
+      - "3000:80"
+    depends_on:
+      - functions
     networks:
-      - landing-page-pro-network
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
-  # Azure Functions 백엔드
-  azure-functions:
+  # ---- Azure Functions (API) ----
+  functions:
     build:
       context: ./azure-functions
       dockerfile: Dockerfile
     container_name: landing-page-pro-functions
+    ports:
+      - "7071:80"
     environment:
       # Azure Functions 설정
       AzureWebJobsStorage: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1;"
@@ -78,10 +85,10 @@ services:
       AZURE_POSTGRES_SSL: ${AZURE_POSTGRES_SSL:-false}
       
       # Entra ID 설정
-      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID}
-      ENTRA_TENANT_NAME: ${ENTRA_TENANT_NAME}
-      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID}
-      
+      - ENTRA_TENANT_ID=${ENTRA_TENANT_ID:-}
+      - ENTRA_TENANT_NAME=${ENTRA_TENANT_NAME:-}
+      - ENTRA_CLIENT_ID=${ENTRA_CLIENT_ID:-}
+
       # AI API Keys
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
@@ -99,7 +106,8 @@ services:
       db-migrate:
         condition: service_completed_successfully
     networks:
-      - landing-page-pro-network
+      - app-network
+    restart: unless-stopped
 
   # 프론트엔드
   frontend:
@@ -117,11 +125,23 @@ services:
         VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY}
     container_name: landing-page-pro-frontend
     ports:
-      - "${FRONTEND_PORT:-5173}:80"
-    depends_on:
-      - azure-functions
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=landingpagepro
+      - POSTGRES_USER=pgadmin
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d:ro
     networks:
-      - landing-page-pro-network
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pgadmin -d landingpagepro"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # Portainer (Docker 관리 UI)
   portainer:
@@ -145,7 +165,15 @@ volumes:
   portainer_data:
     driver: local
 
+# ---- 네트워크 ----
 networks:
-  landing-page-pro-network:
+  app-network:
     driver: bridge
+
+# ---- 볼륨 ----
+volumes:
+  postgres-data:
+    driver: local
+  azurite-data:
+    driver: local
 
