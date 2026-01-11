@@ -24,6 +24,10 @@ supabase/functions/.env
 supabase/functions/.env.*
 !supabase/functions/.env.example
 
+# Azure Functions local settings (CRITICAL: Contains API keys!)
+azure-functions/local.settings.json
+**/local.settings.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -289,7 +289,14 @@ npm start
 
 ### 환경 변수 설정
 
-`local.settings.json` 파일을 생성하고 다음 내용을 설정:
+**⚠️ 보안 중요**: `local.settings.json`은 민감한 API 키를 포함하므로 Git에 커밋되지 않습니다!
+
+```bash
+# 템플릿 파일을 복사하여 생성
+cp local.settings.json.example local.settings.json
+```
+
+`local.settings.json` 파일을 열어 실제 API 키로 교체하세요:
 
 ```json
 {
