@@ -16,17 +16,26 @@ import {
   HttpRequest,
   HttpResponseInit,
   InvocationContext,
-  output,
 } from '@azure/functions';
+import { QueueClient } from '@azure/storage-queue';
 import { requireAuth } from '../middleware/auth';
 import { query, transaction } from '../lib/database';
 import { planGenerationSteps, RequestedOutputs, GenerationOptions } from '../lib/agent/plan';
 import { isUuid } from '../lib/validation';
 
-const jobQueueOutput = output.storageQueue({
-  queueName: 'generation-jobs',
-  connection: 'AzureWebJobsStorage',
-});
+// QueueClient는 함수 호출 시점에 lazy initialization
+let queueClient: QueueClient | null = null;
+
+function getQueueClient(): QueueClient {
+  if (!queueClient) {
+    const connectionString = process.env.AzureWebJobsStorage;
+    if (!connectionString) {
+      throw new Error('AzureWebJobsStorage connection string is not configured');
+    }
+    queueClient = new QueueClient(connectionString, 'generation-jobs');
+  }
+  return queueClient;
+}
 
 export interface StartGenerationJobRequest {
   projectId: string;
@@ -134,7 +143,17 @@ export async function startGenerationJob(
     });
 
     // 큐에 메시지 enqueue (worker가 실행)
-    context.extraOutputs.set(jobQueueOutput, JSON.stringify({ jobId: job.id }));
+    // QueueClient를 사용하여 직접 메시지 전송 (extraOutputs 대신)
+    try {
+      const client = getQueueClient();
+      await client.createIfNotExists();
+      const messageContent = Buffer.from(JSON.stringify({ jobId: job.id })).toString('base64');
+      await client.sendMessage(messageContent);
+      context.log(`[StartGenerationJob] Message sent to queue for job: ${job.id}`);
+    } catch (queueError) {
+      context.error('[StartGenerationJob] Failed to send queue message:', queueError);
+      // Queue 전송 실패해도 Job은 생성됨 - 수동으로 재시도 가능
+    }
 
     return {
       status: 200,
@@ -159,7 +178,6 @@ app.http('startGenerationJob', {
   methods: ['POST'],
   authLevel: 'anonymous',
   route: 'generation/start',
-  extraOutputs: [jobQueueOutput],
   handler: startGenerationJob,
 });
 

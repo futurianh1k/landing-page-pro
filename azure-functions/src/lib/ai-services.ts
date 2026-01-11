@@ -19,7 +19,10 @@ export async function generateWithGemini(
   prompt: string,
   systemPrompt?: string
 ): Promise<string> {
-  const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  // 모델 이름: gemini-1.5-flash-latest (최신 버전)
+  // 참고: @google/generative-ai SDK 버전에 따라 지원되는 모델이 다를 수 있음
+  // 에러 발생 시 폴백 없이 에러를 그대로 throw
+  const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
 
   const fullPrompt = systemPrompt ? `${systemPrompt}\n\n---\n\n${prompt}` : prompt;
 
@@ -91,23 +94,16 @@ export async function generateContent(
   systemPrompt?: string
 ): Promise<string> {
   switch (aiModel) {
-    // TEMPORARILY DISABLED - Gemini
-    // To re-enable: uncomment the lines below and ensure GEMINI_API_KEY is set
-    // case 'gemini':
-    //   return await generateWithGemini(prompt, systemPrompt);
-
-    // TEMPORARILY DISABLED - Claude
-    // To re-enable: uncomment the lines below and ensure ANTHROPIC_API_KEY is set
-    // case 'claude':
-    //   return await generateWithClaude(prompt, systemPrompt);
-
     case 'gemini':
+      // Gemini만 사용, 폴백 없음
+      return await generateWithGemini(prompt, systemPrompt);
+
     case 'claude':
-      // Fallback to ChatGPT when Gemini or Claude is requested but disabled
-      console.warn(`[AI] ${aiModel} is temporarily disabled, falling back to ChatGPT`);
-      return await generateWithChatGPT(prompt, systemPrompt);
+      // Claude만 사용, 폴백 없음
+      return await generateWithClaude(prompt, systemPrompt);
 
     case 'chatgpt':
+      // ChatGPT만 사용
       return await generateWithChatGPT(prompt, systemPrompt);
 
     default:

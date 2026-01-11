@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Rocket, LogOut, FolderOpen, BookOpen } from "lucide-react";
+import { LogOut, FolderOpen, BookOpen } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Link } from "react-router-dom";
@@ -13,27 +13,47 @@ const Header = () => {
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-primary">
-              <Rocket className="h-6 w-6 text-primary-foreground" />
-            </div>
+            <img 
+              src="/logo.svg" 
+              alt="Autopilot Logo" 
+              className="w-10 h-10"
+            />
             <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
               Autopilot
             </span>
           </Link>
           
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-            <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">
-              기능
-            </a>
-            <a href="#pipeline" className="text-muted-foreground hover:text-foreground transition-colors">
-              파이프라인
-            </a>
-            <a href="#personas" className="text-muted-foreground hover:text-foreground transition-colors">
-              사용자
-            </a>
-            <a href="#metrics" className="text-muted-foreground hover:text-foreground transition-colors">
-              성과
-            </a>
+            {user ? (
+              // 로그인 시: 생성예시, 가이드, FAQ
+              <>
+                <Link to="/examples" className="text-muted-foreground hover:text-foreground transition-colors">
+                  생성예시
+                </Link>
+                <Link to="/guide" className="text-muted-foreground hover:text-foreground transition-colors">
+                  가이드
+                </Link>
+                <Link to="/faq" className="text-muted-foreground hover:text-foreground transition-colors">
+                  FAQ
+                </Link>
+              </>
+            ) : (
+              // 비로그인 시: 랜딩페이지 앵커 링크
+              <>
+                <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">
+                  기능
+                </a>
+                <a href="#pipeline" className="text-muted-foreground hover:text-foreground transition-colors">
+                  파이프라인
+                </a>
+                <a href="#personas" className="text-muted-foreground hover:text-foreground transition-colors">
+                  사용자
+                </a>
+                <a href="#metrics" className="text-muted-foreground hover:text-foreground transition-colors">
+                  성과
+                </a>
+              </>
+            )}
           </nav>
           
           <div className="flex items-center gap-4">

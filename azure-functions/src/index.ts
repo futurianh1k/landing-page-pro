@@ -16,6 +16,7 @@ import './functions/createCourse';
 import './functions/deleteProject';
 import './functions/deleteCourse';
 import './functions/getStats';
+import './functions/getUserRoles';
 
 // Module/Lesson Management APIs
 import './functions/getModulesWithLessons';
@@ -47,3 +48,14 @@ import './functions/getGenerationJob';
 import './functions/generationJobWorker';
 import './functions/generationChat';
 import './functions/cancelGenerationJob';
+
+// Project to Course Builder Integration
+import './functions/convertProjectToCourse';
+
+// Course Builder Single Content APIs (Phase 2)
+import './functions/generateSingleContent';
+import './functions/enhanceContent';
+import './functions/regenerateSingleContent';
+
+// Content Version Management (Phase 4)
+import './functions/contentVersions';

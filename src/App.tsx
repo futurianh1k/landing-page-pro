@@ -23,6 +23,15 @@ import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 import Admin from "./pages/Admin";
 import AzureFunctionTest from "./pages/AzureFunctionTest";
+import FAQPage from "./pages/FAQPage";
+import ExamplesPage from "./pages/ExamplesPage";
+import GuidePage from "./pages/GuidePage";
+import BlogPage from "./pages/BlogPage";
+import BlogDetailPage from "./pages/BlogDetailPage";
+import AboutPage from "./pages/AboutPage";
+import PrivacyPage from "./pages/PrivacyPage";
+import TermsPage from "./pages/TermsPage";
+import PricingPage from "./pages/PricingPage";
 
 function App() {
   // Application Insights 초기화
@@ -61,6 +70,15 @@ function App() {
             <Route path="/courses/:id/detail" element={<CourseDetail />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/azure-test" element={<AzureFunctionTest />} />
+            <Route path="/faq" element={<FAQPage />} />
+            <Route path="/examples" element={<ExamplesPage />} />
+            <Route path="/guide" element={<GuidePage />} />
+            <Route path="/blog" element={<BlogPage />} />
+            <Route path="/blog/:slug" element={<BlogDetailPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
             </Routes>

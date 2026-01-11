@@ -12,6 +12,7 @@ interface CreateProjectRequest {
   description?: string;
   documentContent?: string;
   aiModel?: 'gemini' | 'claude' | 'chatgpt';
+  educationTarget?: string;
   educationDuration?: string;
   educationCourse?: string;
   educationSession?: number;
@@ -44,6 +45,7 @@ export async function createProject(
       description,
       documentContent,
       aiModel = 'gemini',
+      educationTarget,
       educationDuration,
       educationCourse,
       educationSession,
@@ -69,6 +71,7 @@ export async function createProject(
           description,
           document_content,
           ai_model,
+          education_target,
           education_stage,
           subject,
           duration_minutes,
@@ -78,7 +81,7 @@ export async function createProject(
           status,
           created_at,
           updated_at
-        ) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+        ) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
         RETURNING *`,
         [
           user.userId,
@@ -86,6 +89,7 @@ export async function createProject(
           description || null,
           documentContent || null,
           aiModel,
+          educationTarget || null,
           educationStage,
           subject || null,
           durationMinutes || null,

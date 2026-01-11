@@ -42,6 +42,7 @@ type Project = {
   user_id: string;
   created_at: string;
   updated_at: string;
+  is_converted_to_course?: boolean;
 };
 
 type Course = {
@@ -328,6 +329,12 @@ const Dashboard = () => {
                           {project.education_course && (
                             <Badge variant="secondary">{project.education_course}</Badge>
                           )}
+                          {project.is_converted_to_course && (
+                            <Badge className="bg-green-500/10 text-green-600 hover:bg-green-500/20">
+                              <BookOpen className="h-3 w-3 mr-1" />
+                              코스로 변환됨
+                            </Badge>
+                          )}
                         </div>
                       </CardHeader>
                       <CardContent>
@@ -351,7 +358,7 @@ const Dashboard = () => {
                             <Button
                               variant="default"
                               size="sm"
-                              onClick={() => navigate(`/project/${project.id}`)}
+                              onClick={() => navigate(`/project/${project.id}/studio`)}
                             >
                               보기
                             </Button>

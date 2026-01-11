@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { ContactModal } from "./ContactModal";
 
 const CTA = () => {
   const navigate = useNavigate();
@@ -44,13 +45,17 @@ const CTA = () => {
               무료로 시작하기
               <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
             </Button>
-            <Button 
-              size="xl" 
-              variant="outline"
-              className="bg-white/10 border-white/30 text-white hover:bg-white/20 backdrop-blur-sm"
-            >
-              영업팀 문의
-            </Button>
+            <ContactModal 
+              trigger={
+                <Button 
+                  size="xl" 
+                  variant="outline"
+                  className="bg-white/10 border-white/30 text-white hover:bg-white/20 backdrop-blur-sm"
+                >
+                  영업팀 문의
+                </Button>
+              }
+            />
           </div>
           
           <div className="pt-8 flex flex-wrap justify-center gap-8 text-sm text-primary-foreground/80">

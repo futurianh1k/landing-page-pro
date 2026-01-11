@@ -1,8 +1,9 @@
 /**
  * CurriculumTreePane 컴포넌트
  * 
- * 수정일: 2026-01-02
- * 수정 내용: Supabase → Azure Functions API 마이그레이션
+ * 수정일: 2026-01-10
+ * 수정 내용: Phase 3 - 소스 추적 UI 추가
+ * 참고: history/2026-01-10_project-coursebuilder-integration-plan.md
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -13,6 +14,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Plus, Loader2, BookOpen, FileText, Edit2, Check, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { ContentSourceBadge, ContentSource } from "./ContentSourceBadge";
 
 // 타입 정의 (Supabase 타입 대신 직접 정의)
 interface CourseModule {
@@ -33,6 +35,7 @@ interface Lesson {
   project_id?: string;
   order_index: number;
   selected_ai_model?: string;
+  content_source?: ContentSource;
   created_at: string;
   updated_at: string;
 }
@@ -363,9 +366,22 @@ const CurriculumTreePane = ({
                               <FileText className="h-4 w-4 text-muted-foreground" />
                               <span className="text-sm">{lesson.title}</span>
                             </div>
-                            <div className="flex items-center gap-1">
-                              {lesson.project_id && (
-                                <span className="text-xs text-muted-foreground">✓</span>
+                            <div className="flex items-center gap-1.5">
+                              {/* 소스 표시 (AI 생성, 수동 작성 등) */}
+                              {lesson.content_source && (
+                                <ContentSourceBadge 
+                                  source={lesson.content_source} 
+                                  size="sm" 
+                                  showLabel={false}
+                                />
+                              )}
+                              {/* 프로젝트 연결 표시 */}
+                              {lesson.project_id && !lesson.content_source && (
+                                <ContentSourceBadge 
+                                  source="imported" 
+                                  size="sm" 
+                                  showLabel={false}
+                                />
                               )}
                               <Button
                                 size="sm"

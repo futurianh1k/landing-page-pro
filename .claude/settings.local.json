@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(az functionapp config appsettings set:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

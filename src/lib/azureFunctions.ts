@@ -273,20 +273,30 @@ export interface GenerationArtifactDto {
   updated_at: string;
 }
 
+export interface JobSummary {
+  id: string;
+  ai_model: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface GetGenerationJobResponse {
   success: boolean;
   job: GenerationJobDto | null;
+  jobs: JobSummary[];  // 모든 Job 요약 (AI 모델별 비교용)
   steps: GenerationStepDto[];
   artifacts: GenerationArtifactDto[];
 }
 
 export async function getGenerationJob(
-  projectId: string
+  projectId: string,
+  jobId?: string  // 특정 Job 조회용
 ): Promise<{ data: GetGenerationJobResponse | null; error: Error | null }> {
-  return callAzureFunction<GetGenerationJobResponse>(
-    `/api/generation/job/${projectId}`,
-    'GET'
-  );
+  const url = jobId 
+    ? `/api/generation/job/${projectId}?jobId=${jobId}`
+    : `/api/generation/job/${projectId}`;
+  return callAzureFunction<GetGenerationJobResponse>(url, 'GET');
 }
 
 export interface GenerationChatRequest {
@@ -371,6 +381,23 @@ export async function generateCurriculum(
     '/api/generateCurriculum',
     'POST',
     request
+  );
+}
+
+
+// ============================================================
+// User Roles
+// ============================================================
+
+export interface UserRolesResponse {
+  success: boolean;
+  roles: string[];
+}
+
+export async function getUserRoles(): Promise<{ data: UserRolesResponse | null; error: Error | null }> {
+  return callAzureFunction<UserRolesResponse>(
+    '/api/user/roles',
+    'GET'
   );
 }
 

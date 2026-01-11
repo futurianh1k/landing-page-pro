@@ -100,6 +100,7 @@ const ProjectCreate = () => {
           description: formData.description,
           documentContent: formData.documentContent,
           aiModel: formData.aiModel,
+          educationTarget: formData.educationTarget || null,
           educationDuration: formData.educationDuration || null,
           educationCourse: formData.educationCourse || null,
           educationSession: formData.educationSession ? parseInt(formData.educationSession) : null,

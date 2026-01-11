@@ -20,7 +20,17 @@ export function buildAzureFunctionsUrl(base: string, endpoint: string): string {
   const basePath = (baseUrl.pathname || "/").replace(/\/+$/, "");
   const normalizedBasePath = basePath === "" || basePath === "/" ? "" : basePath;
 
-  const epPath = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  // endpoint에서 query string 분리 처리
+  let epPath: string;
+  let epQuery: string = "";
+  
+  if (endpoint.includes("?")) {
+    const [pathPart, queryPart] = endpoint.split("?", 2);
+    epPath = pathPart.startsWith("/") ? pathPart : `/${pathPart}`;
+    epQuery = queryPart || "";
+  } else {
+    epPath = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  }
 
   if (normalizedBasePath && (epPath === normalizedBasePath || epPath.startsWith(`${normalizedBasePath}/`))) {
     out.pathname = epPath;
@@ -29,8 +39,11 @@ export function buildAzureFunctionsUrl(base: string, endpoint: string): string {
   }
 
   // Preserve configured query params (e.g. Azure Functions key `code=...`)
-  if (baseUrl.search && !out.search) {
-    out.search = baseUrl.search;
+  // and merge with endpoint query params
+  const baseSearch = baseUrl.search ? baseUrl.search.substring(1) : "";
+  const mergedSearch = [baseSearch, epQuery].filter(Boolean).join("&");
+  if (mergedSearch) {
+    out.search = `?${mergedSearch}`;
   }
 
   return out.toString();

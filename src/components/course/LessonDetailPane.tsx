@@ -1,21 +1,35 @@
 /**
  * LessonDetailPane 컴포넌트
  * 
- * 수정일: 2026-01-02
- * 수정 내용: Supabase → Azure Functions API 마이그레이션
+ * 수정일: 2026-01-10
+ * 수정 내용: Phase 2 - 단일 콘텐츠 생성/보강/재생성 기능 추가
+ * 참고: history/2026-01-10_project-coursebuilder-integration-plan.md
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { callAzureFunctionDirect, processDocument } from "@/lib/azureFunctions";
+import { callAzureFunctionDirect } from "@/lib/azureFunctions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Sparkles, Bot } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { 
+  Loader2, Sparkles, Bot, Presentation, CheckSquare, ClipboardList, 
+  FileText, BookOpen, RefreshCw, Wand2
+} from "lucide-react";
 import { toast } from "sonner";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { ContentSourceBadge, ContentSource } from "./ContentSourceBadge";
+import { VersionHistorySheet } from "./VersionHistorySheet";
 
-// 타입 정의 (Supabase 타입 대신 직접 정의)
+// ============================================================
+// 타입 정의
+// ============================================================
+
 interface Lesson {
   id: string;
   module_id: string;
@@ -24,6 +38,8 @@ interface Lesson {
   project_id?: string;
   order_index: number;
   selected_ai_model?: string;
+  content_source?: ContentSource;
+  current_version?: number;
   created_at: string;
   updated_at: string;
 }
@@ -40,25 +56,10 @@ interface Project {
   updated_at: string;
 }
 
-interface ProjectStage {
-  id: string;
-  project_id: string;
-  ai_model: string;
-  stage_order: number;
-  content?: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-}
-
-interface AiResult {
-  id: string;
-  project_id: string;
-  ai_model: string;
-  status: string;
-  generated_content?: string;
-  created_at: string;
-  updated_at: string;
+interface GeneratedContent {
+  contentType: string;
+  content: any;
+  markdown?: string;
 }
 
 interface LessonDetailPaneProps {
@@ -66,13 +67,7 @@ interface LessonDetailPaneProps {
   courseId: string;
 }
 
-const STAGE_NAMES = [
-  "커리큘럼 설계",
-  "수업안 작성",
-  "슬라이드 구성",
-  "평가/퀴즈",
-  "최종 검토",
-];
+type ContentType = 'slides' | 'quiz' | 'lab' | 'reading' | 'summary';
 
 const AI_MODELS = [
   { value: "gemini", label: "Gemini", description: "Google AI" },
@@ -80,26 +75,68 @@ const AI_MODELS = [
   { value: "chatgpt", label: "ChatGPT", description: "OpenAI" },
 ];
 
+const CONTENT_TYPES: { type: ContentType; label: string; icon: any; description: string }[] = [
+  { type: 'slides', label: '슬라이드', icon: Presentation, description: '프레젠테이션 슬라이드 생성' },
+  { type: 'quiz', label: '퀴즈', icon: CheckSquare, description: '평가 퀴즈 문항 생성' },
+  { type: 'lab', label: '실습 가이드', icon: ClipboardList, description: '단계별 실습 가이드 생성' },
+  { type: 'reading', label: '읽기 자료', icon: FileText, description: '학습 읽기 자료 생성' },
+  { type: 'summary', label: '요약', icon: BookOpen, description: '핵심 내용 요약 생성' },
+];
+
+const STYLE_OPTIONS = [
+  { value: '시각적', label: '시각적', description: '다이어그램, 이미지 활용 강조' },
+  { value: '간결', label: '간결하게', description: '핵심만 정리' },
+  { value: '상세', label: '상세하게', description: '예시와 설명 풍부하게' },
+  { value: '초보자', label: '초보자용', description: '쉬운 용어, 기초 설명' },
+  { value: '전문가', label: '전문가용', description: '고급 개념, 심화 내용' },
+  { value: '실무', label: '실무 중심', description: '실제 적용 사례 중심' },
+];
+
+// ============================================================
+// 메인 컴포넌트
+// ============================================================
+
 const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [project, setProject] = useState<Project | null>(null);
-  const [stages, setStages] = useState<ProjectStage[]>([]);
-  const [allStagesByModel, setAllStagesByModel] = useState<Record<string, ProjectStage[]>>({});
-  const [aiResults, setAiResults] = useState<AiResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [selectedAiModel, setSelectedAiModel] = useState<string>("gemini");
+  
+  // 생성된 콘텐츠 저장
+  const [generatedContents, setGeneratedContents] = useState<Record<ContentType, GeneratedContent | null>>({
+    slides: null,
+    quiz: null,
+    lab: null,
+    reading: null,
+    summary: null,
+  });
+  
+  // 현재 생성 중인 콘텐츠 타입
+  const [generatingType, setGeneratingType] = useState<ContentType | null>(null);
+  
+  // 보강 다이얼로그 상태
+  const [enhanceDialogOpen, setEnhanceDialogOpen] = useState(false);
+  const [enhanceTarget, setEnhanceTarget] = useState<ContentType | null>(null);
+  const [enhanceRequest, setEnhanceRequest] = useState("");
+  
+  // 재생성 다이얼로그 상태
+  const [regenerateDialogOpen, setRegenerateDialogOpen] = useState(false);
+  const [regenerateTarget, setRegenerateTarget] = useState<ContentType | null>(null);
+  const [regenerateStyle, setRegenerateStyle] = useState<string>("");
+
+  // ============================================================
+  // 데이터 로딩
+  // ============================================================
 
   const fetchLessonData = useCallback(async () => {
     try {
       setLoading(true);
 
-      // Azure Functions API로 레슨 상세 조회
       const { data, error } = await callAzureFunctionDirect<{
         success: boolean;
         lesson: Lesson;
         project: Project | null;
-        aiResults: AiResult[];
       }>(`/api/getlesson/${lessonId}`, 'GET');
 
       if (error) throw error;
@@ -110,12 +147,6 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
 
       setLesson(data.lesson);
       setProject(data.project);
-      setAiResults(data.aiResults || []);
-
-      // AI 결과가 있으면 첫 번째 모델 선택
-      if (data.aiResults && data.aiResults.length > 0) {
-        setSelectedAiModel(data.aiResults[0].ai_model);
-      }
     } catch (error) {
       console.error("Error fetching lesson data:", error);
       toast.error("레슨 정보를 불러오는 중 오류가 발생했습니다.");
@@ -124,171 +155,254 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
     }
   }, [lessonId]);
 
-  // 선택된 모델의 stages만 가져오기 (기존 로직 유지)
-  const fetchStages = useCallback(async () => {
-    if (!lesson?.project_id || !selectedAiModel) {
-      setStages([]);
-      return;
-    }
-
-    try {
-      const { data, error } = await callAzureFunctionDirect<{
-        success: boolean;
-        stages: ProjectStage[];
-      }>(`/api/getprojectstages/${lesson.project_id}?aiModel=${selectedAiModel}`, 'GET');
-
-      if (error) throw error;
-      setStages(data?.stages || []);
-    } catch (error) {
-      console.error("Error fetching stages:", error);
-    }
-  }, [lesson?.project_id, selectedAiModel]);
-
-  // 모든 AI 모델의 stages 가져오기
-  const fetchAllStagesByModel = useCallback(async () => {
-    if (!project?.id) {
-      setAllStagesByModel({});
-      return;
-    }
-
-    try {
-      // 모든 모델에 대해 stages 가져오기
-      const modelStages: Record<string, ProjectStage[]> = {};
-      const models = ['gemini', 'claude', 'chatgpt'];
-      
-      await Promise.all(
-        models.map(async (model) => {
-          try {
-            const { data, error } = await callAzureFunctionDirect<{
-              success: boolean;
-              stages: ProjectStage[];
-            }>(`/api/getprojectstages/${project.id}?aiModel=${model}`, 'GET');
-            
-            if (!error && data?.stages && data.stages.length > 0) {
-              modelStages[model] = data.stages;
-            }
-          } catch (err) {
-            // 특정 모델의 stages가 없으면 무시
-            console.log(`[LessonDetailPane] No stages for model ${model}`);
-          }
-        })
-      );
-      
-      console.log('[LessonDetailPane] Fetched stages by model:', Object.keys(modelStages));
-      setAllStagesByModel(modelStages);
-    } catch (error) {
-      console.error("Error fetching all stages by model:", error);
-    }
-  }, [project?.id]);
-
   useEffect(() => {
     fetchLessonData();
   }, [fetchLessonData]);
 
-  useEffect(() => {
-    fetchStages();
-  }, [fetchStages]);
+  // ============================================================
+  // 단일 콘텐츠 생성 (파이프라인 X)
+  // ============================================================
 
-  useEffect(() => {
-    if (project?.id) {
-      fetchAllStagesByModel();
-    }
-  }, [project?.id, fetchAllStagesByModel]);
-
-  const handleGenerateContent = async () => {
+  const handleGenerateSingleContent = async (contentType: ContentType) => {
     if (!lesson) return;
 
     try {
       setGenerating(true);
+      setGeneratingType(contentType);
 
-      let projectId = lesson.project_id;
-
-      // project_id가 없으면 프로젝트 생성
-      if (!projectId) {
-        const { data: projectData, error: projectError } = await callAzureFunctionDirect<{
-          success: boolean;
-          project: Project;
-          existed: boolean;
-        }>('/api/createlessonproject', 'POST', {
-          lessonId: lesson.id,
-          aiModel: selectedAiModel,
-        });
-
-        if (projectError || !projectData?.success || !projectData.project) {
-          throw projectError || new Error('Failed to create project');
-        }
-
-        projectId = projectData.project.id;
-        
-        // 로컬 상태 업데이트
-        setLesson({ ...lesson, project_id: projectId });
-        setProject(projectData.project);
-      }
-
-      // process-document Azure Function 호출
-      const documentContent = project?.document_content || lesson.learning_objectives || lesson.title || "";
-      
-      if (!documentContent.trim()) {
-        toast.error("레슨 제목이나 학습 목표를 입력해주세요.");
-        return;
-      }
-
-      const { error: funcError } = await processDocument({
-        projectId: projectId!,
-        documentContent: documentContent,
-        aiModel: selectedAiModel as 'gemini' | 'claude' | 'chatgpt',
-        regenerate: !!lesson.project_id,
-      });
-
-      if (funcError) {
-        console.error("Error invoking process-document:", funcError);
-        throw funcError;
-      }
-
-      toast.success("AI 콘텐츠 생성이 시작되었습니다.");
-      
-      // 데이터 새로고침
-      await fetchLessonData();
-      
-      // 실시간 업데이트를 위해 잠시 후 다시 새로고침
-      setTimeout(() => {
-        fetchLessonData();
-        fetchStages();
-        fetchAllStagesByModel();
-      }, 3000);
-    } catch (error) {
-      console.error("Error generating content:", error);
-      const errorMessage = error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.";
-      toast.error(`콘텐츠 생성 중 오류가 발생했습니다: ${errorMessage}`);
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const handleSelectAiModel = async (aiModel: string) => {
-    if (!lesson) return;
-    
-    try {
       const { data, error } = await callAzureFunctionDirect<{
         success: boolean;
-        lesson: Lesson;
-      }>(`/api/updatelesson/${lesson.id}`, 'PUT', {
-        selected_ai_model: aiModel,
+        data: GeneratedContent;
+        message: string;
+      }>('/api/course/generate-content', 'POST', {
+        lessonId: lesson.id,
+        contentType,
+        context: {
+          lessonTitle: lesson.title,
+          learningObjectives: lesson.learning_objectives?.split('\n').filter(Boolean) || [],
+        },
+        aiModel: selectedAiModel,
       });
 
       if (error) throw error;
-      
-      if (!data?.success) {
-        throw new Error('Failed to update lesson');
-      }
 
-      toast.success(`${aiModel} 모델이 최종 선택되었습니다.`);
-      setLesson({ ...lesson, selected_ai_model: aiModel });
+      if (data?.success && data.data) {
+        setGeneratedContents(prev => ({
+          ...prev,
+          [contentType]: data.data,
+        }));
+        toast.success(data.message || `${contentType} 콘텐츠가 생성되었습니다.`);
+      } else {
+        throw new Error('콘텐츠 생성 실패');
+      }
     } catch (error) {
-      console.error("Error updating selected AI model:", error);
-      toast.error("AI 모델 선택 중 오류가 발생했습니다.");
+      console.error("Error generating content:", error);
+      toast.error(`${contentType} 콘텐츠 생성 중 오류가 발생했습니다.`);
+    } finally {
+      setGenerating(false);
+      setGeneratingType(null);
     }
   };
+
+  // ============================================================
+  // 콘텐츠 보강
+  // ============================================================
+
+  const handleEnhanceContent = async () => {
+    if (!lesson || !enhanceTarget || !enhanceRequest.trim()) return;
+
+    const existingContent = generatedContents[enhanceTarget];
+    if (!existingContent) {
+      toast.error("보강할 콘텐츠가 없습니다.");
+      return;
+    }
+
+    try {
+      setGenerating(true);
+      setGeneratingType(enhanceTarget);
+      setEnhanceDialogOpen(false);
+
+      const { data, error } = await callAzureFunctionDirect<{
+        success: boolean;
+        data: GeneratedContent;
+        message: string;
+      }>('/api/course/enhance-content', 'POST', {
+        lessonId: lesson.id,
+        contentType: enhanceTarget,
+        existingContent: existingContent.content,
+        enhanceRequest: enhanceRequest,
+        aiModel: selectedAiModel,
+      });
+
+      if (error) throw error;
+
+      if (data?.success && data.data) {
+        setGeneratedContents(prev => ({
+          ...prev,
+          [enhanceTarget]: data.data,
+        }));
+        toast.success(data.message || `${enhanceTarget} 콘텐츠가 보강되었습니다.`);
+      } else {
+        throw new Error('콘텐츠 보강 실패');
+      }
+    } catch (error) {
+      console.error("Error enhancing content:", error);
+      toast.error(`${enhanceTarget} 콘텐츠 보강 중 오류가 발생했습니다.`);
+    } finally {
+      setGenerating(false);
+      setGeneratingType(null);
+      setEnhanceRequest("");
+      setEnhanceTarget(null);
+    }
+  };
+
+  // ============================================================
+  // 콘텐츠 재생성
+  // ============================================================
+
+  const handleRegenerateSingleContent = async () => {
+    if (!lesson || !regenerateTarget) return;
+
+    try {
+      setGenerating(true);
+      setGeneratingType(regenerateTarget);
+      setRegenerateDialogOpen(false);
+
+      const { data, error } = await callAzureFunctionDirect<{
+        success: boolean;
+        data: GeneratedContent;
+        message: string;
+      }>('/api/course/regenerate-content', 'POST', {
+        lessonId: lesson.id,
+        contentType: regenerateTarget,
+        aiModel: selectedAiModel,
+        style: regenerateStyle || undefined,
+      });
+
+      if (error) throw error;
+
+      if (data?.success && data.data) {
+        setGeneratedContents(prev => ({
+          ...prev,
+          [regenerateTarget]: data.data,
+        }));
+        toast.success(data.message || `${regenerateTarget} 콘텐츠가 재생성되었습니다.`);
+      } else {
+        throw new Error('콘텐츠 재생성 실패');
+      }
+    } catch (error) {
+      console.error("Error regenerating content:", error);
+      toast.error(`${regenerateTarget} 콘텐츠 재생성 중 오류가 발생했습니다.`);
+    } finally {
+      setGenerating(false);
+      setGeneratingType(null);
+      setRegenerateStyle("");
+      setRegenerateTarget(null);
+    }
+  };
+
+  // ============================================================
+  // 콘텐츠 렌더링
+  // ============================================================
+
+  const renderContentPreview = (contentType: ContentType, content: GeneratedContent) => {
+    if (content.markdown) {
+      return (
+        <div className="prose prose-sm max-w-none dark:prose-invert">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {content.markdown}
+          </ReactMarkdown>
+        </div>
+      );
+    }
+
+    // JSON 콘텐츠 렌더링
+    const data = content.content;
+
+    if (contentType === 'slides' && data.slides) {
+      return (
+        <div className="space-y-4">
+          <h4 className="font-semibold">{data.deckTitle || '슬라이드'}</h4>
+          <div className="grid gap-3">
+            {data.slides.map((slide: any, idx: number) => (
+              <div key={idx} className="border rounded-lg p-3 bg-muted/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge variant="outline">{slide.slideNumber || idx + 1}</Badge>
+                  <span className="font-medium">{slide.title}</span>
+                </div>
+                {slide.bulletPoints && (
+                  <ul className="text-sm text-muted-foreground list-disc list-inside">
+                    {slide.bulletPoints.map((point: string, i: number) => (
+                      <li key={i}>{point}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (contentType === 'quiz' && data.items) {
+      return (
+        <div className="space-y-4">
+          <h4 className="font-semibold">{data.quizTitle || '퀴즈'}</h4>
+          <div className="grid gap-3">
+            {data.items.map((item: any, idx: number) => (
+              <div key={idx} className="border rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge variant="outline">Q{item.questionNumber || idx + 1}</Badge>
+                  <Badge variant="secondary">{item.difficulty}</Badge>
+                </div>
+                <p className="font-medium mb-2">{item.question}</p>
+                {item.options && (
+                  <div className="text-sm space-y-1">
+                    {item.options.map((opt: string, i: number) => (
+                      <div key={i} className={`${opt === item.correctAnswer ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>
+                        {i + 1}. {opt}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (contentType === 'lab' && data.steps) {
+      return (
+        <div className="space-y-4">
+          <h4 className="font-semibold">{data.labTitle || '실습 가이드'}</h4>
+          <p className="text-sm text-muted-foreground">예상 시간: {data.estimatedTime}</p>
+          <div className="grid gap-3">
+            {data.steps.map((step: any, idx: number) => (
+              <div key={idx} className="border rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge>{step.stepNumber || idx + 1}</Badge>
+                  <span className="font-medium">{step.title}</span>
+                </div>
+                <p className="text-sm text-muted-foreground">{step.instruction}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // 기본 JSON 출력
+    return (
+      <pre className="text-sm bg-muted p-3 rounded-lg overflow-auto">
+        {JSON.stringify(data, null, 2)}
+      </pre>
+    );
+  };
+
+  // ============================================================
+  // 로딩 상태
+  // ============================================================
 
   if (loading) {
     return (
@@ -312,6 +426,12 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
     );
   }
 
+  // ============================================================
+  // 렌더링
+  // ============================================================
+
+  const hasAnyContent = Object.values(generatedContents).some(c => c !== null);
+
   return (
     <div className="space-y-6">
       {/* 레슨 정보 */}
@@ -326,18 +446,26 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
                 </CardDescription>
               )}
             </div>
-            {lesson.project_id && (
-              <Badge variant="outline">콘텐츠 생성됨</Badge>
-            )}
+            <div className="flex gap-2">
+              {/* 콘텐츠 소스 표시 */}
+              <ContentSourceBadge 
+                source={lesson.content_source || (lesson.project_id ? 'imported' : undefined)} 
+                size="md" 
+                showLabel={true}
+              />
+              {lesson.project_id && lesson.content_source !== 'imported' && (
+                <Badge variant="outline">프로젝트 연결됨</Badge>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           {/* AI 모델 선택 */}
-          <div className="mb-4">
-            <label className="text-sm font-medium mb-2 block flex items-center gap-2">
+          <div className="mb-6">
+            <Label className="text-sm font-medium mb-2 flex items-center gap-2">
               <Bot className="h-4 w-4" />
               AI 모델 선택
-            </label>
+            </Label>
             <Select value={selectedAiModel} onValueChange={setSelectedAiModel}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="AI 모델을 선택하세요" />
@@ -354,253 +482,236 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
               </SelectContent>
             </Select>
           </div>
-
-          {!lesson.project_id ? (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                이 레슨에 대한 AI 콘텐츠가 아직 생성되지 않았습니다.
-              </p>
-              <Button
-                onClick={handleGenerateContent}
-                disabled={generating}
-                className="w-full"
-              >
-                {generating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    {selectedAiModel.toUpperCase()}로 생성 중...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    {selectedAiModel.toUpperCase()}로 콘텐츠 생성하기
-                  </>
-                )}
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <Button
-                onClick={handleGenerateContent}
-                disabled={generating}
-                variant="outline"
-                className="w-full"
-              >
-                {generating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    {selectedAiModel.toUpperCase()}로 재생성 중...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    {selectedAiModel.toUpperCase()}로 콘텐츠 재생성
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
         </CardContent>
       </Card>
 
-      {/* AI 결과가 있으면 표시 */}
-      {project && aiResults.length > 0 && (
+      {/* 콘텐츠 생성 패널 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wand2 className="h-5 w-5" />
+            콘텐츠 생성
+          </CardTitle>
+          <CardDescription>
+            레슨에 필요한 콘텐츠를 개별적으로 생성하세요. (파이프라인 전체 실행 X, 빠른 생성 ~1-2분)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {CONTENT_TYPES.map(({ type, label, icon: Icon, description }) => {
+              const hasContent = generatedContents[type] !== null;
+              const isGenerating = generatingType === type;
+              
+              return (
+                <Button
+                  key={type}
+                  variant={hasContent ? "secondary" : "outline"}
+                  className="h-auto py-4 flex-col gap-2"
+                  disabled={generating}
+                  onClick={() => handleGenerateSingleContent(type)}
+                >
+                  {isGenerating ? (
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  ) : (
+                    <Icon className="h-6 w-6" />
+                  )}
+                  <span className="font-medium">{label}</span>
+                  <span className="text-xs text-muted-foreground">{isGenerating ? '생성 중...' : (hasContent ? '재생성' : '생성')}</span>
+                </Button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 생성된 콘텐츠 표시 */}
+      {hasAnyContent && (
         <Card>
           <CardHeader>
-            <CardTitle>AI 생성 결과</CardTitle>
-            <CardDescription>
-              여러 AI 모델의 결과를 비교할 수 있습니다.
-            </CardDescription>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle>생성된 콘텐츠</CardTitle>
+                <CardDescription>
+                  각 콘텐츠를 확인하고 필요시 보강하거나 재생성할 수 있습니다.
+                </CardDescription>
+              </div>
+              {/* 버전 히스토리 버튼 */}
+              <VersionHistorySheet 
+                lessonId={lesson.id}
+                currentVersion={lesson.current_version}
+                onRestore={(content, contentType) => {
+                  // 복원된 콘텐츠를 상태에 반영
+                  if (contentType && content) {
+                    setGeneratedContents(prev => ({
+                      ...prev,
+                      [contentType as ContentType]: {
+                        contentType,
+                        content,
+                      },
+                    }));
+                    toast.success(`${CONTENT_TYPES.find(c => c.type === contentType)?.label || contentType} 콘텐츠가 복원되었습니다.`);
+                  }
+                }}
+              />
+            </div>
           </CardHeader>
           <CardContent>
-            <Tabs value={selectedAiModel} onValueChange={setSelectedAiModel}>
-              <TabsList>
-                {aiResults.map((result) => (
-                  <TabsTrigger key={result.id} value={result.ai_model}>
-                    {result.ai_model}
-                    {result.status === "completed" && (
-                      <Badge variant="outline" className="ml-2">완료</Badge>
-                    )}
-                    {result.status === "failed" && (
-                      <Badge variant="destructive" className="ml-2">실패</Badge>
-                    )}
+            <Tabs defaultValue={Object.keys(generatedContents).find(k => generatedContents[k as ContentType] !== null) || 'slides'}>
+              <TabsList className="mb-4">
+                {CONTENT_TYPES.filter(({ type }) => generatedContents[type] !== null).map(({ type, label, icon: Icon }) => (
+                  <TabsTrigger key={type} value={type} className="flex items-center gap-1">
+                    <Icon className="h-4 w-4" />
+                    {label}
                   </TabsTrigger>
                 ))}
               </TabsList>
-              {aiResults.map((result) => (
-                <TabsContent key={result.id} value={result.ai_model}>
-                  <div className="space-y-4">
-                    {result.generated_content && 
-                     !result.generated_content.includes("생성 실패") && 
-                     !result.generated_content.includes("Generation Failed") ? (
-                      <>
-                        <div className="prose prose-sm max-w-none">
-                          <pre className="whitespace-pre-wrap text-sm">
-                            {result.generated_content}
-                          </pre>
-                        </div>
-                        {lesson && lesson.selected_ai_model !== result.ai_model && (
-                          <Button
-                            onClick={() => handleSelectAiModel(result.ai_model)}
-                            variant="default"
-                            className="w-full"
-                          >
-                            이 모델을 최종 선택
-                          </Button>
-                        )}
-                        {lesson && lesson.selected_ai_model === result.ai_model && (
-                          <div className="flex items-center justify-center p-3 bg-primary/10 rounded-md">
-                            <span className="text-sm font-medium text-primary">
-                              ✓ 최종 선택된 모델
-                            </span>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <p className="text-destructive mb-2">콘텐츠 생성에 실패했습니다.</p>
-                        <p className="text-sm">콘텐츠 재생성 버튼을 클릭하여 다시 시도해주세요.</p>
+              
+              {CONTENT_TYPES.map(({ type, label }) => {
+                const content = generatedContents[type];
+                if (!content) return null;
+                
+                return (
+                  <TabsContent key={type} value={type}>
+                    <div className="space-y-4">
+                      {/* 액션 버튼 */}
+                      <div className="flex gap-2 justify-end">
+                        <Dialog open={enhanceDialogOpen && enhanceTarget === type} onOpenChange={(open) => {
+                          setEnhanceDialogOpen(open);
+                          if (open) setEnhanceTarget(type);
+                        }}>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm" disabled={generating}>
+                              <Sparkles className="h-4 w-4 mr-2" />
+                              AI로 보강
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>{label} 콘텐츠 보강</DialogTitle>
+                              <DialogDescription>
+                                기존 콘텐츠를 유지하면서 어떤 부분을 개선하고 싶으신가요?
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="py-4">
+                              <Label htmlFor="enhance-request">보강 요청</Label>
+                              <Textarea
+                                id="enhance-request"
+                                placeholder="예: 더 자세한 예시를 추가해줘, 난이도를 낮춰줘, 실무 사례를 포함해줘..."
+                                value={enhanceRequest}
+                                onChange={(e) => setEnhanceRequest(e.target.value)}
+                                className="mt-2"
+                                rows={3}
+                              />
+                            </div>
+                            <DialogFooter>
+                              <Button variant="outline" onClick={() => setEnhanceDialogOpen(false)}>
+                                취소
+                              </Button>
+                              <Button onClick={handleEnhanceContent} disabled={!enhanceRequest.trim()}>
+                                <Sparkles className="h-4 w-4 mr-2" />
+                                보강하기
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+
+                        <Dialog open={regenerateDialogOpen && regenerateTarget === type} onOpenChange={(open) => {
+                          setRegenerateDialogOpen(open);
+                          if (open) setRegenerateTarget(type);
+                        }}>
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="sm" disabled={generating}>
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              재생성
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>{label} 콘텐츠 재생성</DialogTitle>
+                              <DialogDescription>
+                                기존 콘텐츠를 완전히 새롭게 생성합니다. 원하는 스타일을 선택하세요.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="py-4">
+                              <Label>스타일 선택 (선택사항)</Label>
+                              <div className="grid grid-cols-2 gap-2 mt-2">
+                                {STYLE_OPTIONS.map((style) => (
+                                  <Button
+                                    key={style.value}
+                                    variant={regenerateStyle === style.value ? "default" : "outline"}
+                                    size="sm"
+                                    className="justify-start"
+                                    onClick={() => setRegenerateStyle(
+                                      regenerateStyle === style.value ? "" : style.value
+                                    )}
+                                  >
+                                    {style.label}
+                                  </Button>
+                                ))}
+                              </div>
+                              {regenerateStyle && (
+                                <p className="text-sm text-muted-foreground mt-2">
+                                  {STYLE_OPTIONS.find(s => s.value === regenerateStyle)?.description}
+                                </p>
+                              )}
+                            </div>
+                            <DialogFooter>
+                              <Button variant="outline" onClick={() => setRegenerateDialogOpen(false)}>
+                                취소
+                              </Button>
+                              <Button onClick={handleRegenerateSingleContent}>
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                                재생성하기
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
                       </div>
-                    )}
-                  </div>
-                </TabsContent>
-              ))}
+                      
+                      {/* 콘텐츠 프리뷰 */}
+                      <div className="border rounded-lg p-4 max-h-[500px] overflow-auto">
+                        {renderContentPreview(type, content)}
+                      </div>
+                    </div>
+                  </TabsContent>
+                );
+              })}
             </Tabs>
           </CardContent>
         </Card>
       )}
 
-      {/* 프로젝트 스테이지 표시 - AI 모델별로 탭으로 구분 */}
-      {project && Object.keys(allStagesByModel).length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>생성 단계</CardTitle>
-            <CardDescription>
-              AI 모델별 5단계 파이프라인 진행 상황
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs value={selectedAiModel} onValueChange={setSelectedAiModel}>
-              <TabsList>
-                {Object.keys(allStagesByModel).map((model) => (
-                  <TabsTrigger key={model} value={model}>
-                    {model.toUpperCase()}
-                    {allStagesByModel[model].every(s => s.status === 'completed') && (
-                      <Badge variant="outline" className="ml-2">완료</Badge>
-                    )}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-              {Object.entries(allStagesByModel).map(([model, modelStages]) => (
-                <TabsContent key={model} value={model}>
-                  <div className="space-y-4">
-                    {STAGE_NAMES.map((stageName, index) => {
-                      const stage = modelStages.find((s) => (s.stage_order || s.order_index || 0) === index + 1);
-                      return (
-                        <div key={index} className="border rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold">{index + 1}. {stageName}</span>
-                              {stage && (
-                                <Badge
-                                  variant={
-                                    stage.status === "completed"
-                                      ? "default"
-                                      : stage.status === "processing"
-                                      ? "secondary"
-                                      : stage.status === "failed"
-                                      ? "destructive"
-                                      : "outline"
-                                  }
-                                >
-                                  {stage.status === "completed" ? "완료" : 
-                                   stage.status === "processing" ? "처리 중" :
-                                   stage.status === "failed" ? "실패" : stage.status}
-                                </Badge>
-                              )}
-                              {!stage && (
-                                <Badge variant="outline">대기 중</Badge>
-                              )}
-                            </div>
-                          </div>
-                          {stage?.content && (
-                            <div className="mt-2 text-sm text-muted-foreground">
-                              <div className="prose prose-sm max-w-none">
-                                <pre className="whitespace-pre-wrap">{stage.content}</pre>
-                              </div>
-                            </div>
-                          )}
-                          {stage?.status === "failed" && !stage.content && (
-                            <div className="mt-2 text-sm text-destructive">
-                              이 단계의 생성이 실패했습니다. 콘텐츠 재생성 버튼을 클릭하여 다시 시도해주세요.
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </TabsContent>
-              ))}
-            </Tabs>
+      {/* 콘텐츠가 없을 때 가이드 */}
+      {!hasAnyContent && !generating && (
+        <Card className="border-dashed">
+          <CardContent className="py-8">
+            <div className="text-center">
+              <Wand2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="font-semibold mb-2">콘텐츠를 생성해보세요</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                위의 버튼을 클릭하여 슬라이드, 퀴즈, 실습 가이드 등을 생성할 수 있습니다.
+                <br />
+                각 콘텐츠는 개별적으로 빠르게 생성됩니다 (~1-2분).
+              </p>
+            </div>
           </CardContent>
         </Card>
       )}
-      
-      {/* 기존 stages 표시 (하위 호환성) */}
-      {project && stages.length > 0 && Object.keys(allStagesByModel).length === 0 && (
+
+      {/* 생성 중 표시 */}
+      {generating && (
         <Card>
-          <CardHeader>
-            <CardTitle>생성 단계</CardTitle>
-            <CardDescription>
-              5단계 파이프라인 진행 상황
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {STAGE_NAMES.map((stageName, index) => {
-                const stage = stages.find((s) => (s.stage_order || s.order_index || 0) === index + 1);
-                return (
-                  <div key={index} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{index + 1}. {stageName}</span>
-                        {stage && (
-                          <Badge
-                            variant={
-                              stage.status === "completed"
-                                ? "default"
-                                : stage.status === "processing"
-                                ? "secondary"
-                                : stage.status === "failed"
-                                ? "destructive"
-                                : "outline"
-                            }
-                          >
-                            {stage.status === "completed" ? "완료" : 
-                             stage.status === "processing" ? "처리 중" :
-                             stage.status === "failed" ? "실패" : stage.status}
-                          </Badge>
-                        )}
-                        {!stage && (
-                          <Badge variant="outline">대기 중</Badge>
-                        )}
-                      </div>
-                    </div>
-                    {stage?.content && (
-                      <div className="mt-2 text-sm text-muted-foreground">
-                        <div className="prose prose-sm max-w-none">
-                          <pre className="whitespace-pre-wrap">{stage.content}</pre>
-                        </div>
-                      </div>
-                    )}
-                    {stage?.status === "failed" && !stage.content && (
-                      <div className="mt-2 text-sm text-destructive">
-                        이 단계의 생성이 실패했습니다. 콘텐츠 재생성 버튼을 클릭하여 다시 시도해주세요.
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+          <CardContent className="py-8">
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <div className="text-center">
+                <p className="font-medium">
+                  {generatingType && CONTENT_TYPES.find(c => c.type === generatingType)?.label} 콘텐츠 생성 중...
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  AI가 콘텐츠를 생성하고 있습니다. 잠시만 기다려주세요.
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>

@@ -29,7 +29,22 @@ export function InfographicCanvas({
     return () => ro.disconnect();
   }, []);
 
-  const height = 520;
+  // 동적 높이 계산: 섹션 개수에 따라 조정
+  const sections = useMemo(() => {
+    return Array.isArray(data?.sections) ? data.sections : [];
+  }, [data?.sections]);
+
+  const height = useMemo(() => {
+    const baseHeight = 200; // 제목 + 부제목 + 여백
+    const cols = width >= 760 ? 2 : 1;
+    const boxHeight = 120;
+    const gap = 14;
+    const rows = Math.ceil(sections.length / cols);
+    const contentHeight = rows * (boxHeight + gap);
+    const minHeight = 520;
+    const calculatedHeight = baseHeight + contentHeight + 60; // 추가 여백
+    return Math.max(minHeight, calculatedHeight);
+  }, [sections.length, width]);
 
   const palette = useMemo(() => {
     const p = data?.palette;
@@ -112,8 +127,8 @@ export function InfographicCanvas({
 
       y += 14;
 
-      const sections = Array.isArray(data?.sections) ? data!.sections! : [];
-      if (!sections.length) {
+      const allSections = Array.isArray(data?.sections) ? data!.sections! : [];
+      if (!allSections.length) {
         ctx.fillStyle = "rgba(11,18,32,0.65)";
         ctx.font = "500 14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
         wrapText(ctx, "인포그래픽 설계(JSON)가 아직 없습니다.", x, y, maxW, 18, 3);
@@ -128,7 +143,8 @@ export function InfographicCanvas({
       let rowY = y;
       let nextRowY = y;
 
-      for (const s of sections.slice(0, 6)) {
+      // 모든 섹션 표시 (제한 없음)
+      for (const s of allSections) {
         const bx = x + col * (boxW + gap);
         const by = rowY;
         const boxH = 120;

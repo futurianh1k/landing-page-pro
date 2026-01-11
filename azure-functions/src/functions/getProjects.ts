@@ -24,31 +24,34 @@ export async function getProjects(
       [user.userId, user.name || user.email || 'Unknown User']
     );
 
-    // Get projects for user (레슨에 연결된 프로젝트는 제외)
+    // Get projects for user (모든 프로젝트 포함, 코스 변환 여부 표시)
     const projects = await query(
-      `SELECT 
-        id,
-        user_id,
-        title,
-        description,
-        document_content,
-        document_url,
-        ai_model,
-        education_stage,
-        subject,
-        duration_minutes,
-        education_duration,
-        education_course,
-        education_session,
-        status,
-        created_at,
-        updated_at
-       FROM projects
-       WHERE user_id = $1
-         AND id NOT IN (
-           SELECT project_id FROM lessons WHERE project_id IS NOT NULL
-         )
-       ORDER BY created_at DESC`,
+      `SELECT
+        p.id,
+        p.user_id,
+        p.title,
+        p.description,
+        p.document_content,
+        p.document_url,
+        p.ai_model,
+        p.education_stage,
+        p.subject,
+        p.duration_minutes,
+        p.education_duration,
+        p.education_course,
+        p.education_session,
+        p.status,
+        p.created_at,
+        p.updated_at,
+        CASE
+          WHEN EXISTS (
+            SELECT 1 FROM lessons WHERE project_id = p.id
+          ) THEN true
+          ELSE false
+        END as is_converted_to_course
+       FROM projects p
+       WHERE p.user_id = $1
+       ORDER BY p.created_at DESC`,
       [user.userId]
     );
 

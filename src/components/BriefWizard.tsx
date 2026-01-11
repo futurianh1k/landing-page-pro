@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, ArrowRight, CheckCircle2, FileText, Clock, BookOpen, Brain, Eye, Layers } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, FileText, Clock, BookOpen, Brain, Eye, Layers, Users } from "lucide-react";
 
 interface BriefWizardProps {
   onComplete: (data: BriefData) => void;
@@ -20,6 +20,7 @@ interface BriefWizardProps {
 export interface BriefData {
   title: string;
   description: string;
+  educationTarget: string;
   educationDuration: string;
   educationCourse: string;
   educationSession: string;
@@ -36,11 +37,29 @@ export interface BriefData {
   };
 }
 
+// 교육대상 분류 (보편적 기준)
+export const EDUCATION_TARGETS = [
+  { value: "elementary", label: "초등학생", description: "7-12세", ageGroup: "children" },
+  { value: "middle_school", label: "중학생", description: "13-15세", ageGroup: "teens" },
+  { value: "high_school", label: "고등학생", description: "16-18세", ageGroup: "teens" },
+  { value: "university", label: "대학생/대학원생", description: "대학 재학 및 졸업예정자", ageGroup: "young_adult" },
+  { value: "job_seeker", label: "취업준비생", description: "구직 중인 성인", ageGroup: "young_adult" },
+  { value: "office_worker", label: "직장인 (사무직)", description: "기업 일반 직원", ageGroup: "adult" },
+  { value: "manager", label: "관리자/리더", description: "팀장, 임원 등 관리 직급", ageGroup: "adult" },
+  { value: "professional", label: "전문직", description: "의사, 변호사, 회계사 등", ageGroup: "adult" },
+  { value: "self_employed", label: "자영업자/소상공인", description: "개인 사업 운영자", ageGroup: "adult" },
+  { value: "public_servant", label: "공무원", description: "공공기관 종사자", ageGroup: "adult" },
+  { value: "educator", label: "교사/교육자", description: "학교, 학원, 기업 교육 담당자", ageGroup: "adult" },
+  { value: "general_adult", label: "일반 성인", description: "특정 직업군 구분 없음", ageGroup: "adult" },
+  { value: "senior", label: "시니어", description: "60세 이상", ageGroup: "senior" },
+] as const;
+
 const BriefWizard = ({ onComplete, onCancel, initialData }: BriefWizardProps) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<BriefData>({
     title: initialData?.title || "",
     description: initialData?.description || "",
+    educationTarget: initialData?.educationTarget || "",
     educationDuration: initialData?.educationDuration || "",
     educationCourse: initialData?.educationCourse || "",
     educationSession: initialData?.educationSession || "",
@@ -136,66 +155,96 @@ const BriefWizard = ({ onComplete, onCancel, initialData }: BriefWizardProps) =>
       case 2:
         return (
           <div className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="educationDuration">교육시간</Label>
-              <Select
-                value={formData.educationDuration}
-                onValueChange={(value) => setFormData({ ...formData, educationDuration: value })}
-              >
-                <SelectTrigger id="educationDuration" className="bg-background">
-                  <SelectValue placeholder="선택하세요" />
-                </SelectTrigger>
-                <SelectContent className="bg-background z-50">
-                  <SelectItem value="1시간">1시간</SelectItem>
-                  <SelectItem value="2시간">2시간</SelectItem>
-                  <SelectItem value="3시간">3시간</SelectItem>
-                  <SelectItem value="4시간">4시간</SelectItem>
-                  <SelectItem value="반나절">반나절 (4-6시간)</SelectItem>
-                  <SelectItem value="하루">하루 (8시간)</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* 교육대상 선택 */}
+            <div className="space-y-3">
+              <Label className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                교육대상
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                교육 콘텐츠의 대상 학습자를 선택해주세요
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[280px] overflow-y-auto pr-1">
+                {EDUCATION_TARGETS.map((target) => (
+                  <button
+                    key={target.value}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, educationTarget: target.value })}
+                    className={`flex flex-col items-start p-3 rounded-lg border-2 text-left transition-all hover:border-primary/50 hover:bg-accent/50 ${
+                      formData.educationTarget === target.value
+                        ? "border-primary bg-primary/5"
+                        : "border-muted"
+                    }`}
+                  >
+                    <span className="font-medium text-sm">{target.label}</span>
+                    <span className="text-xs text-muted-foreground">{target.description}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="educationCourse">교육과정</Label>
-              <Select
-                value={formData.educationCourse}
-                onValueChange={(value) => setFormData({ ...formData, educationCourse: value })}
-              >
-                <SelectTrigger id="educationCourse" className="bg-background">
-                  <SelectValue placeholder="선택하세요" />
-                </SelectTrigger>
-                <SelectContent className="bg-background z-50">
-                  <SelectItem value="기본과정">기본과정</SelectItem>
-                  <SelectItem value="심화과정">심화과정</SelectItem>
-                  <SelectItem value="실무과정">실무과정</SelectItem>
-                  <SelectItem value="전문가과정">전문가과정</SelectItem>
-                  <SelectItem value="입문과정">입문과정</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="educationDuration">교육시간</Label>
+                <Select
+                  value={formData.educationDuration}
+                  onValueChange={(value) => setFormData({ ...formData, educationDuration: value })}
+                >
+                  <SelectTrigger id="educationDuration" className="bg-background">
+                    <SelectValue placeholder="선택하세요" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background z-50">
+                    <SelectItem value="1시간">1시간</SelectItem>
+                    <SelectItem value="2시간">2시간</SelectItem>
+                    <SelectItem value="3시간">3시간</SelectItem>
+                    <SelectItem value="4시간">4시간</SelectItem>
+                    <SelectItem value="반나절">반나절 (4-6시간)</SelectItem>
+                    <SelectItem value="하루">하루 (8시간)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="educationSession">교육 회차</Label>
-              <Select
-                value={formData.educationSession}
-                onValueChange={(value) => setFormData({ ...formData, educationSession: value })}
-              >
-                <SelectTrigger id="educationSession" className="bg-background">
-                  <SelectValue placeholder="선택하세요" />
-                </SelectTrigger>
-                <SelectContent className="bg-background z-50">
-                  <SelectItem value="1">1회차</SelectItem>
-                  <SelectItem value="2">2회차</SelectItem>
-                  <SelectItem value="3">3회차</SelectItem>
-                  <SelectItem value="4">4회차</SelectItem>
-                  <SelectItem value="5">5회차</SelectItem>
-                  <SelectItem value="6">6회차</SelectItem>
-                  <SelectItem value="8">8회차</SelectItem>
-                  <SelectItem value="10">10회차</SelectItem>
-                  <SelectItem value="12">12회차</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <Label htmlFor="educationCourse">교육과정</Label>
+                <Select
+                  value={formData.educationCourse}
+                  onValueChange={(value) => setFormData({ ...formData, educationCourse: value })}
+                >
+                  <SelectTrigger id="educationCourse" className="bg-background">
+                    <SelectValue placeholder="선택하세요" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background z-50">
+                    <SelectItem value="기본과정">기본과정</SelectItem>
+                    <SelectItem value="심화과정">심화과정</SelectItem>
+                    <SelectItem value="실무과정">실무과정</SelectItem>
+                    <SelectItem value="전문가과정">전문가과정</SelectItem>
+                    <SelectItem value="입문과정">입문과정</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="educationSession">교육 회차</Label>
+                <Select
+                  value={formData.educationSession}
+                  onValueChange={(value) => setFormData({ ...formData, educationSession: value })}
+                >
+                  <SelectTrigger id="educationSession" className="bg-background">
+                    <SelectValue placeholder="선택하세요" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background z-50">
+                    <SelectItem value="1">1회차</SelectItem>
+                    <SelectItem value="2">2회차</SelectItem>
+                    <SelectItem value="3">3회차</SelectItem>
+                    <SelectItem value="4">4회차</SelectItem>
+                    <SelectItem value="5">5회차</SelectItem>
+                    <SelectItem value="6">6회차</SelectItem>
+                    <SelectItem value="8">8회차</SelectItem>
+                    <SelectItem value="10">10회차</SelectItem>
+                    <SelectItem value="12">12회차</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         );
@@ -394,12 +443,20 @@ const BriefWizard = ({ onComplete, onCancel, initialData }: BriefWizardProps) =>
                 </CardContent>
               </Card>
 
-              {(formData.educationDuration || formData.educationCourse || formData.educationSession) && (
+              {(formData.educationTarget || formData.educationDuration || formData.educationCourse || formData.educationSession) && (
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm font-semibold text-muted-foreground">교육 설정</CardTitle>
                   </CardHeader>
-                  <CardContent className="grid grid-cols-3 gap-4">
+                  <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {formData.educationTarget && (
+                      <div>
+                        <span className="text-xs text-muted-foreground">교육대상</span>
+                        <p className="text-sm font-medium">
+                          {EDUCATION_TARGETS.find(t => t.value === formData.educationTarget)?.label || formData.educationTarget}
+                        </p>
+                      </div>
+                    )}
                     {formData.educationDuration && (
                       <div>
                         <span className="text-xs text-muted-foreground">시간</span>

@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 const mockUser = { id: "user-1", email: "test@example.com" };
 
+let isAdminRole = false;
+
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({
     user: mockUser,
@@ -16,6 +18,15 @@ vi.mock("@/hooks/useAuth", () => ({
     updatePassword: vi.fn(),
     signInWithGoogle: vi.fn(),
     signOut: vi.fn(),
+  }),
+}));
+
+vi.mock("@/hooks/useUserRole", () => ({
+  useUserRole: () => ({
+    roles: isAdminRole ? ["admin"] : ["user"],
+    isAdmin: isAdminRole,
+    loading: false,
+    refresh: vi.fn(),
   }),
 }));
 
@@ -92,6 +103,7 @@ const setupSupabaseMock = (isAdminRole: boolean) => {
 
 describe("Admin 페이지", () => {
   it("관리자 권한이 없으면 접근 불가 메시지를 보여준다", async () => {
+    isAdminRole = false;
     setupSupabaseMock(false);
 
     render(
@@ -106,6 +118,7 @@ describe("Admin 페이지", () => {
   });
 
   it("관리자 권한이면 콘솔 정보를 렌더링한다", async () => {
+    isAdminRole = true;
     setupSupabaseMock(true);
 
     render(
