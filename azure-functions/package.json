@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc && npm run copy-files",
-    "copy-files": "shx cp host.json dist/ && shx cp package.dist.json dist/package.json",
+    "copy-files": "shx cp host.json dist/ && shx cp package.dist.json dist/package.json && shx cp package-lock.json dist/",
     "watch": "tsc -w",
     "prestart": "npm run build",
     "start": "func start",
