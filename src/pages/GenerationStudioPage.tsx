@@ -93,6 +93,7 @@ export default function GenerationStudioPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [previewTab, setPreviewTab] = useState<"pipeline" | "document" | "infographic" | "slides">("pipeline");
+  const [pptxTemplate, setPptxTemplate] = useState<"default" | "minimal" | "creative">("default");
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
   const [selectedAiModel, setSelectedAiModel] = useState<string>("");
@@ -978,7 +979,7 @@ export default function GenerationStudioPage() {
         projectDescription: project.description,
         slidesJson: effectiveSlidesJson,
         assets: slidesAssets,
-        template: "default",
+        template: pptxTemplate,
       });
       saveAs(blob, fileName);
       toast.success("PowerPoint 파일이 다운로드되었습니다.");
@@ -1296,6 +1297,26 @@ export default function GenerationStudioPage() {
                       </div>
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* 다운로드 버튼 (드롭다운) */}
+            {jobState.job?.status === "completed" && (
+              <Select
+                value={pptxTemplate}
+                onValueChange={(v) => setPptxTemplate(v as any)}
+              >
+                <SelectTrigger className="w-[150px] h-8 text-xs">
+                  <div className="flex items-center gap-1">
+                    <Presentation className="h-3 w-3" />
+                    <span>PPT 템플릿</span>
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Modern (default)</SelectItem>
+                  <SelectItem value="minimal">Minimal</SelectItem>
+                  <SelectItem value="creative">Creative</SelectItem>
                 </SelectContent>
               </Select>
             )}
