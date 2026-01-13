@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     rollupOptions: {
-      external: ['pdfjs-dist'],
+      external: ['pdfjs-dist', 'mammoth'],
     },
   },
 }));
