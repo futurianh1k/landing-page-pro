@@ -63,6 +63,7 @@ jobs:
       - name: Build TypeScript
         working-directory: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
         run: npm run build
+        continue-on-error: false
 
       - name: Determine environment
         id: set-env

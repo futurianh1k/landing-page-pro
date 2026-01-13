@@ -19,16 +19,40 @@ export async function generateWithGemini(
   prompt: string,
   systemPrompt?: string
 ): Promise<string> {
-  // 모델 이름: gemini-1.5-flash (또는 gemini-1.5-flash-002)
-  // 참고: -latest 접미사는 v1 API에서 지원되지 않음
-  // 에러 발생 시 폴백 없이 에러를 그대로 throw
-  const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  // REST API 직접 호출 (SDK 버전 문제 회피)
+  // gemini-1.5-flash-latest 모델 사용
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not configured');
+  }
 
   const fullPrompt = systemPrompt ? `${systemPrompt}\n\n---\n\n${prompt}` : prompt;
 
-  const result = await model.generateContent(fullPrompt);
-  const response = await result.response;
-  return response.text();
+  // v1 API 사용 (v1beta는 일부 모델에서 지원되지 않음)
+  const geminiModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  const url = `https://generativelanguage.googleapis.com/v1/models/${geminiModel}:generateContent?key=${apiKey}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      contents: [{
+        parts: [{
+          text: fullPrompt
+        }]
+      }]
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json() as any;
+  return data.candidates[0].content.parts[0].text;
 }
 
 /**
