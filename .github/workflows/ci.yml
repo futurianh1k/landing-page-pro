@@ -22,6 +22,11 @@ on:
       - main
       - develop
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 env:
   NODE_VERSION: '20'
   # Supabase 레거시 코드 테스트를 위한 더미 환경 변수
