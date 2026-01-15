@@ -133,8 +133,7 @@ jobs:
     needs: build
     if: needs.build.outputs.environment == 'production'
     runs-on: ubuntu-latest
-    environment:
-      name: production
+    environment: production
 
     steps:
       - name: Download build artifact

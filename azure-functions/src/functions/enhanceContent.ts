@@ -43,17 +43,8 @@ async function callAiModel(
     const { generateWithGemini } = await import('../lib/ai-services');
     return await generateWithGemini(prompt, systemPrompt);
   } else if (aiModel === 'claude') {
-    const Anthropic = (await import('@anthropic-ai/sdk')).default;
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
-    
-    const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: prompt }],
-    });
-    
-    return response.content[0].type === 'text' ? response.content[0].text : '';
+    const { generateWithClaude } = await import('../lib/ai-services');
+    return await generateWithClaude(prompt, systemPrompt);
   } else {
     // ChatGPT
     const OpenAI = (await import('openai')).default;

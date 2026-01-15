@@ -89,6 +89,13 @@ export async function getLessonDetail(
     let project: Project | null = null;
     let aiResults: AiResult[] = [];
     let stages: any[] = [];
+    let lessonContents: any[] = [];
+
+    // Get lesson contents (모든 AI 모델의 생성된 콘텐츠)
+    lessonContents = await query(
+      `SELECT * FROM lesson_contents WHERE lesson_id = $1 ORDER BY created_at DESC`,
+      [lessonId]
+    );
 
     // If lesson has project_id, get project, AI results, and stages
     if (lesson.project_id) {
@@ -142,6 +149,7 @@ export async function getLessonDetail(
         project,
         aiResults,
         stages,
+        lessonContents,
       },
     };
   } catch (error) {

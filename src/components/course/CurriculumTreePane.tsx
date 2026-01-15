@@ -256,6 +256,7 @@ const CurriculumTreePane = ({
                             }}
                             role="button"
                             tabIndex={0}
+                            aria-label="모듈 제목 저장"
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault();
@@ -275,6 +276,7 @@ const CurriculumTreePane = ({
                             }}
                             role="button"
                             tabIndex={0}
+                            aria-label="모듈 제목 편집 취소"
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault();

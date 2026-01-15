@@ -169,13 +169,30 @@ export async function processDocument(
       for (let i = 0; i < STAGE_NAMES.length; i++) {
         context.log(`[ProcessDocument] Generating stage ${i + 1}/${STAGE_NAMES.length}`);
 
-        const content = await generateStageContent(
-          projectId,
-          i,
-          aiModel,
-          documentContent,
-          stageContents
-        );
+        let content: string;
+        try {
+          content = await generateStageContent(
+            projectId,
+            i,
+            aiModel,
+            documentContent,
+            stageContents
+          );
+        } catch (stageError) {
+          const errorMessage = stageError instanceof Error ? stageError.message : String(stageError);
+          context.error(`[ProcessDocument] Stage ${i + 1} (${STAGE_NAMES[i]}) 생성 실패 (model=${aiModel}):`, errorMessage);
+          
+          // API 키 관련 오류인 경우 명확한 메시지 제공
+          if (errorMessage.includes('not configured') || errorMessage.includes('API key')) {
+            throw new Error(`${STAGE_NAMES[i]} 단계 생성 실패: ${aiModel === 'gemini' ? 'GEMINI_API_KEY' : aiModel === 'claude' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY'}가 설정되지 않았거나 유효하지 않습니다.`);
+          }
+          
+          throw new Error(`${STAGE_NAMES[i]} 단계 생성 실패 (AI 모델: ${aiModel}): ${errorMessage}`);
+        }
+
+        if (!content || content.trim().length === 0) {
+          throw new Error(`${STAGE_NAMES[i]} 단계의 AI 응답이 비어있습니다.`);
+        }
 
         stageContents.push(content);
 

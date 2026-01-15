@@ -132,9 +132,22 @@ export async function generateCurriculum(
 
     // Generate curriculum using AI
     context.log(`Calling AI API with model: ${aiModel}`);
-    const aiContent = await generateContent(aiModel, curriculumPrompt, systemPrompt);
+    let aiContent: string;
+    try {
+      aiContent = await generateContent(aiModel, curriculumPrompt, systemPrompt);
+    } catch (aiError) {
+      const errorMessage = aiError instanceof Error ? aiError.message : String(aiError);
+      context.error(`[GenerateCurriculum] AI API 호출 실패 (model=${aiModel}):`, errorMessage);
+      
+      // API 키 관련 오류인 경우 명확한 메시지 제공
+      if (errorMessage.includes('not configured') || errorMessage.includes('API key')) {
+        throw new Error(`${aiModel === 'gemini' ? 'GEMINI_API_KEY' : aiModel === 'claude' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY'}가 설정되지 않았거나 유효하지 않습니다.`);
+      }
+      
+      throw new Error(`AI 모델(${aiModel}) 호출 실패: ${errorMessage}`);
+    }
 
-    if (!aiContent) {
+    if (!aiContent || aiContent.trim().length === 0) {
       throw new Error('AI 응답에서 콘텐츠를 찾을 수 없습니다.');
     }
 

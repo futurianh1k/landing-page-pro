@@ -522,3 +522,59 @@ railway up
 ---
 
 이 로드맵을 따라 진행하면 12주 안에 상용화 가능한 AI 프레젠테이션 생성 서비스를 만들 수 있습니다! ✅
+
+## 개발 히스토리
+
+### 2026-01-14 (화)
+
+#### 1. GitHub Actions 워크플로우 YAML 검증 오류 수정
+- **문제**: `deploy-frontend.yml`과 `deploy-functions.yml`에서 "Value 'staging' is not valid" 검증 오류 발생
+- **원인**: `environment` 필드가 단순 문자열(`staging`)로 설정되어 있어 YAML 구조가 올바르지 않음
+- **해결**:
+  - `environment: staging` → `environment:\n  name: staging` 형식으로 변경
+  - 두 워크플로우 파일 모두 수정 완료
+- **참고**: YAML 구문은 올바르나, GitHub 저장소에 'staging' 환경이 실제로 생성되어 있어야 함 (Settings → Environments)
+
+#### 2. 접근성(Accessibility) 문제 해결
+- **InfographicPreview.tsx (Line 946)**:
+  - 이미 `aria-label="Infographic HTML code"` 속성이 추가되어 있어 수정 불필요
+- **CurriculumTreePane.tsx (Lines 259, 279)**:
+  - Line 259: `aria-label="모듈 제목 저장"` 추가
+  - Line 279: `aria-label="모듈 제목 편집 취소"` 추가
+  - ARIA 버튼 요소에 접근 가능한 이름 제공 완료
+
+#### 3. 레슨별 콘텐츠 로딩 문제 수정
+- **문제**:
+  - 커리큘럼(레슨)을 선택했을 때 해당 레슨의 콘텐츠가 표시되지 않고 최근 생성된 결과만 표시됨
+  - AI 모델 필터를 변경할 때마다 서버에서 데이터를 다시 불러와서 발생
+- **원인**:
+  - `fetchLessonData` 함수가 `selectedAiModel`을 dependency로 가지고 있어, 필터 변경 시마다 데이터 재로드
+  - 서버 사이드에서 필터링하면서 레슨별 콘텐츠 구분이 제대로 안 됨
+- **해결**:
+  - **새 상태 추가**: `allLessonContents` - 모든 레슨 콘텐츠의 원본 데이터 저장
+  - **fetchLessonData 수정**:
+    - `selectedAiModel` dependency 제거
+    - 모든 콘텐츠를 필터링 없이 `allLessonContents`에 저장
+    - 레슨 선택 시에만 서버에서 데이터 로드
+  - **클라이언트 사이드 필터링 추가**:
+    - `useEffect`를 사용해 `selectedAiModel` 변경 시 클라이언트에서 필터링
+    - 서버 요청 없이 UI 레벨에서만 처리
+  - **레슨 변경 시 필터 리셋**:
+    - 새 레슨 선택 시 AI 모델 필터를 'all'로 자동 리셋
+- **파일**: `src/components/course/LessonDetailPane.tsx`
+  - Line 151: `allLessonContents` 상태 추가
+  - Lines 147-188: `fetchLessonData` 함수 수정 (dependency에서 `selectedAiModel` 제거)
+  - Lines 190-194: 레슨 변경 시 필터 리셋 로직 추가
+  - Lines 197-238: AI 모델 필터 변경 시 클라이언트 사이드 필터링 로직 추가
+
+#### 4. 작업 요약
+- ✅ GitHub Actions YAML 검증 오류 수정 (환경 구성 문법 수정)
+- ✅ 접근성 문제 해결 (ARIA 레이블 추가)
+- ✅ 레슨별 콘텐츠 로딩 문제 해결 (클라이언트 사이드 필터링으로 변경)
+- ✅ 사용자 경험 개선 (레슨 선택 시 올바른 콘텐츠 표시)
+
+#### 5. 기술적 개선 사항
+- **성능 최적화**: AI 모델 필터 변경 시 불필요한 서버 요청 제거
+- **데이터 무결성**: 레슨별 콘텐츠가 정확하게 구분되어 표시됨
+- **사용자 경험**: 레슨 전환이 더 빠르고 정확하게 작동
+- **코드 품질**: 관심사 분리 (서버 데이터 로딩 vs 클라이언트 필터링)

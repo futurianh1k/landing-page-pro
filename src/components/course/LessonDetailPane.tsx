@@ -18,13 +18,24 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Loader2, Sparkles, Bot, Presentation, CheckSquare, ClipboardList,
-  FileText, BookOpen, RefreshCw, Wand2, MessageCircle, Lightbulb
+  FileText, BookOpen, RefreshCw, Wand2, MessageCircle, Lightbulb, Download, FileDown
 } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ContentSourceBadge, ContentSource } from "./ContentSourceBadge";
 import { VersionHistorySheet } from "./VersionHistorySheet";
+import { AIModelComparison } from "./AIModelComparison";
+import { SlidePreview } from "./SlidePreview";
+import { SupplementaryMaterialsPreview } from "./SupplementaryMaterialsPreview";
+import { downloadAsJSON, downloadAsMarkdown, downloadAsText, downloadAllAsZip } from "@/lib/downloadUtils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 // ============================================================
 // 타입 정의
@@ -103,8 +114,7 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [selectedAiModel, setSelectedAiModel] = useState<string>("gemini");
-  
+
   // 생성된 콘텐츠 저장
   const [generatedContents, setGeneratedContents] = useState<Record<ContentType, GeneratedContent | null>>({
     lesson_plan: null,
@@ -129,6 +139,17 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
   const [regenerateTarget, setRegenerateTarget] = useState<ContentType | null>(null);
   const [regenerateStyle, setRegenerateStyle] = useState<string>("");
 
+  // 모델 비교 모드
+  const [comparisonMode, setComparisonMode] = useState(false);
+  const [comparisonContentType, setComparisonContentType] = useState<ContentType | null>(null);
+
+  // AI 모델 필터
+  const [selectedAiModel, setSelectedAiModel] = useState<string>('all');
+  const [availableAiModels, setAvailableAiModels] = useState<string[]>([]);
+
+  // 모든 레슨 콘텐츠 원본 데이터 (필터링 전)
+  const [allLessonContents, setAllLessonContents] = useState<any[]>([]);
+
   // ============================================================
   // 데이터 로딩
   // ============================================================
@@ -141,16 +162,33 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
         success: boolean;
         lesson: Lesson;
         project: Project | null;
+        lessonContents?: any[];
       }>(`/api/getlesson/${lessonId}`, 'GET');
 
       if (error) throw error;
-      
+
       if (!data?.success || !data.lesson) {
         throw new Error('Lesson not found');
       }
 
       setLesson(data.lesson);
       setProject(data.project);
+
+      // lessonContents 로드 - 모든 콘텐츠를 불러옴 (필터링 없이)
+      if (data.lessonContents && data.lessonContents.length > 0) {
+        // AI 모델 목록 추출
+        const models = new Set<string>();
+        data.lessonContents.forEach((lc: any) => {
+          models.add(lc.ai_model);
+        });
+        setAvailableAiModels(Array.from(models));
+
+        // 모든 콘텐츠를 저장 (나중에 필터링할 원본 데이터)
+        setAllLessonContents(data.lessonContents);
+      } else {
+        setAvailableAiModels([]);
+        setAllLessonContents([]);
+      }
     } catch (error) {
       console.error("Error fetching lesson data:", error);
       toast.error("레슨 정보를 불러오는 중 오류가 발생했습니다.");
@@ -160,8 +198,54 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
   }, [lessonId]);
 
   useEffect(() => {
+    // 레슨이 변경될 때 AI 모델 필터를 'all'로 리셋
+    setSelectedAiModel('all');
     fetchLessonData();
   }, [fetchLessonData]);
+
+  // AI 모델 필터 변경 시 콘텐츠 필터링
+  useEffect(() => {
+    if (allLessonContents.length === 0) {
+      // 데이터가 없으면 초기화
+      setGeneratedContents({
+        lesson_plan: null,
+        slides: null,
+        hands_on_activity: null,
+        assessment: null,
+        supplementary_materials: null,
+        discussion_prompts: null,
+        instructor_notes: null,
+      });
+      return;
+    }
+
+    const contents: Record<ContentType, GeneratedContent | null> = {
+      lesson_plan: null,
+      slides: null,
+      hands_on_activity: null,
+      assessment: null,
+      supplementary_materials: null,
+      discussion_prompts: null,
+      instructor_notes: null,
+    };
+
+    // 선택된 AI 모델에 맞는 콘텐츠만 필터링
+    allLessonContents.forEach((lc: any) => {
+      // 모델 필터가 'all'이거나 일치하는 경우에만
+      if (selectedAiModel === 'all' || selectedAiModel === lc.ai_model) {
+        const contentType = lc.content_type as ContentType;
+        if (contentType in contents && !contents[contentType]) {
+          contents[contentType] = {
+            contentType: lc.content_type,
+            content: lc.content,
+            markdown: lc.markdown,
+          };
+        }
+      }
+    });
+
+    setGeneratedContents(contents);
+  }, [allLessonContents, selectedAiModel]);
 
   // ============================================================
   // 단일 콘텐츠 생성 (파이프라인 X)
@@ -309,7 +393,7 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
   // 콘텐츠 렌더링
   // ============================================================
 
-  const renderContentPreview = (contentType: ContentType, content: GeneratedContent) => {
+  const renderContentPreview = (contentType: ContentType, content: GeneratedContent, lessonTitle: string) => {
     if (content.markdown) {
       return (
         <div className="prose prose-sm max-w-none dark:prose-invert">
@@ -325,26 +409,10 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
 
     if (contentType === 'slides' && data.slides) {
       return (
-        <div className="space-y-4">
-          <h4 className="font-semibold">{data.deckTitle || '슬라이드'}</h4>
-          <div className="grid gap-3">
-            {data.slides.map((slide: any, idx: number) => (
-              <div key={idx} className="border rounded-lg p-3 bg-muted/30">
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge variant="outline">{slide.slideNumber || idx + 1}</Badge>
-                  <span className="font-medium">{slide.title}</span>
-                </div>
-                {slide.bulletPoints && (
-                  <ul className="text-sm text-muted-foreground list-disc list-inside">
-                    {slide.bulletPoints.map((point: string, i: number) => (
-                      <li key={i}>{point}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+        <SlidePreview
+          content={data}
+          lessonTitle={lessonTitle}
+        />
       );
     }
 
@@ -374,6 +442,15 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
             ))}
           </div>
         </div>
+      );
+    }
+
+    if (contentType === 'supplementary_materials') {
+      return (
+        <SupplementaryMaterialsPreview
+          content={data}
+          lessonTitle={lessonTitle}
+        />
       );
     }
 
@@ -465,13 +542,38 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
           </div>
         </CardHeader>
         <CardContent>
-          {/* AI 모델 선택 */}
+          {/* AI 모델 필터 (기존 생성된 콘텐츠가 있을 경우에만 표시) */}
+          {availableAiModels.length > 0 && (
+            <div className="mb-6">
+              <Label className="text-sm font-medium mb-2 flex items-center gap-2">
+                <Bot className="h-4 w-4" />
+                생성된 콘텐츠 필터 (AI 모델별)
+              </Label>
+              <Select value={selectedAiModel} onValueChange={setSelectedAiModel}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="AI 모델을 선택하세요" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">모든 모델</SelectItem>
+                  {availableAiModels.map((model) => (
+                    <SelectItem key={model} value={model}>
+                      {model.toUpperCase()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* 콘텐츠 생성용 AI 모델 선택 */}
           <div className="mb-6">
             <Label className="text-sm font-medium mb-2 flex items-center gap-2">
               <Bot className="h-4 w-4" />
-              AI 모델 선택
+              콘텐츠 생성 AI 모델
             </Label>
-            <Select value={selectedAiModel} onValueChange={setSelectedAiModel}>
+            <Select value={lesson.selected_ai_model || 'gemini'} onValueChange={(value) => {
+              setLesson(prev => ({ ...prev, selected_ai_model: value } as Lesson));
+            }}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="AI 모델을 선택하세요" />
               </SelectTrigger>
@@ -493,39 +595,106 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
       {/* 콘텐츠 생성 패널 */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Wand2 className="h-5 w-5" />
-            콘텐츠 생성
-          </CardTitle>
-          <CardDescription>
-            레슨에 필요한 콘텐츠를 개별적으로 생성하세요. (파이프라인 전체 실행 X, 빠른 생성 ~1-2분)
-          </CardDescription>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Wand2 className="h-5 w-5" />
+                콘텐츠 생성
+              </CardTitle>
+              <CardDescription>
+                레슨에 필요한 콘텐츠를 개별적으로 생성하세요. (파이프라인 전체 실행 X, 빠른 생성 ~1-2분)
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setComparisonMode(!comparisonMode)}
+            >
+              <Bot className="h-4 w-4 mr-2" />
+              {comparisonMode ? '일반 모드' : '모델 비교 모드'}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {CONTENT_TYPES.map(({ type, label, icon: Icon, description }) => {
-              const hasContent = generatedContents[type] !== null;
-              const isGenerating = generatingType === type;
-              
-              return (
-                <Button
-                  key={type}
-                  variant={hasContent ? "secondary" : "outline"}
-                  className="h-auto py-4 flex-col gap-2"
-                  disabled={generating}
-                  onClick={() => handleGenerateSingleContent(type)}
-                >
-                  {isGenerating ? (
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                  ) : (
-                    <Icon className="h-6 w-6" />
-                  )}
-                  <span className="font-medium">{label}</span>
-                  <span className="text-xs text-muted-foreground">{isGenerating ? '생성 중...' : (hasContent ? '재생성' : '생성')}</span>
-                </Button>
-              );
-            })}
-          </div>
+          {!comparisonMode ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              {CONTENT_TYPES.map(({ type, label, icon: Icon, description }) => {
+                const hasContent = generatedContents[type] !== null;
+                const isGenerating = generatingType === type;
+
+                return (
+                  <Button
+                    key={type}
+                    variant={hasContent ? "secondary" : "outline"}
+                    className="h-auto py-4 flex-col gap-2"
+                    disabled={generating}
+                    onClick={() => handleGenerateSingleContent(type)}
+                  >
+                    {isGenerating ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      <Icon className="h-6 w-6" />
+                    )}
+                    <span className="font-medium">{label}</span>
+                    <span className="text-xs text-muted-foreground">{isGenerating ? '생성 중...' : (hasContent ? '재생성' : '생성')}</span>
+                  </Button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="text-sm text-muted-foreground mb-4">
+                여러 AI 모델로 동시에 콘텐츠를 생성하고 결과를 비교할 수 있습니다.
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {CONTENT_TYPES.map(({ type, label, icon: Icon }) => (
+                  <Dialog
+                    key={type}
+                    open={comparisonContentType === type}
+                    onOpenChange={(open) => {
+                      if (!open) setComparisonContentType(null);
+                    }}
+                  >
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="h-auto py-4 flex-col gap-2"
+                        onClick={() => setComparisonContentType(type)}
+                      >
+                        <Icon className="h-6 w-6" />
+                        <span className="font-medium">{label}</span>
+                        <span className="text-xs text-muted-foreground">모델 비교</span>
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>{label} - AI 모델 비교</DialogTitle>
+                        <DialogDescription>
+                          여러 AI 모델의 결과를 비교하고 원하는 결과를 선택하세요
+                        </DialogDescription>
+                      </DialogHeader>
+                      <AIModelComparison
+                        lessonId={lesson.id}
+                        lessonTitle={lesson.title}
+                        learningObjectives={lesson.learning_objectives?.split('\n').filter(Boolean)}
+                        contentType={type}
+                        contentTypeLabel={label}
+                        onSelectResult={(content, aiModel) => {
+                          // 선택한 결과를 현재 콘텐츠로 설정
+                          setGeneratedContents(prev => ({
+                            ...prev,
+                            [type]: content,
+                          }));
+                          setComparisonContentType(null);
+                          setComparisonMode(false);
+                        }}
+                      />
+                    </DialogContent>
+                  </Dialog>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -540,24 +709,42 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
                   각 콘텐츠를 확인하고 필요시 보강하거나 재생성할 수 있습니다.
                 </CardDescription>
               </div>
-              {/* 버전 히스토리 버튼 */}
-              <VersionHistorySheet 
-                lessonId={lesson.id}
-                currentVersion={lesson.current_version}
-                onRestore={(content, contentType) => {
-                  // 복원된 콘텐츠를 상태에 반영
-                  if (contentType && content) {
-                    setGeneratedContents(prev => ({
-                      ...prev,
-                      [contentType as ContentType]: {
-                        contentType,
-                        content,
-                      },
-                    }));
-                    toast.success(`${CONTENT_TYPES.find(c => c.type === contentType)?.label || contentType} 콘텐츠가 복원되었습니다.`);
-                  }
-                }}
-              />
+              <div className="flex gap-2">
+                {/* 전체 다운로드 버튼 */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await downloadAllAsZip(generatedContents, lesson.title);
+                      toast.success("모든 콘텐츠가 다운로드되었습니다.");
+                    } catch (error) {
+                      toast.error("다운로드 중 오류가 발생했습니다.");
+                    }
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  전체 다운로드
+                </Button>
+                {/* 버전 히스토리 버튼 */}
+                <VersionHistorySheet
+                  lessonId={lesson.id}
+                  currentVersion={lesson.current_version}
+                  onRestore={(content, contentType) => {
+                    // 복원된 콘텐츠를 상태에 반영
+                    if (contentType && content) {
+                      setGeneratedContents(prev => ({
+                        ...prev,
+                        [contentType as ContentType]: {
+                          contentType,
+                          content,
+                        },
+                      }));
+                      toast.success(`${CONTENT_TYPES.find(c => c.type === contentType)?.label || contentType} 콘텐츠가 복원되었습니다.`);
+                    }
+                  }}
+                />
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -580,6 +767,45 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
                     <div className="space-y-4">
                       {/* 액션 버튼 */}
                       <div className="flex gap-2 justify-end">
+                        {/* 다운로드 드롭다운 */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <FileDown className="h-4 w-4 mr-2" />
+                              다운로드
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                downloadAsJSON(content, `${lesson.title}_${label}`);
+                                toast.success("JSON 파일이 다운로드되었습니다.");
+                              }}
+                            >
+                              <FileText className="h-4 w-4 mr-2" />
+                              JSON 형식
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                downloadAsMarkdown(content, `${lesson.title}_${label}`, type);
+                                toast.success("Markdown 파일이 다운로드되었습니다.");
+                              }}
+                            >
+                              <FileText className="h-4 w-4 mr-2" />
+                              Markdown 형식
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                downloadAsText(content, `${lesson.title}_${label}`, type);
+                                toast.success("텍스트 파일이 다운로드되었습니다.");
+                              }}
+                            >
+                              <FileText className="h-4 w-4 mr-2" />
+                              텍스트 형식
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+
                         <Dialog open={enhanceDialogOpen && enhanceTarget === type} onOpenChange={(open) => {
                           setEnhanceDialogOpen(open);
                           if (open) setEnhanceTarget(type);
@@ -674,8 +900,8 @@ const LessonDetailPane = ({ lessonId, courseId }: LessonDetailPaneProps) => {
                       </div>
                       
                       {/* 콘텐츠 프리뷰 */}
-                      <div className="border rounded-lg p-4 max-h-[500px] overflow-auto">
-                        {renderContentPreview(type, content)}
+                      <div className={`border rounded-lg ${type === 'slides' ? '' : 'p-4 max-h-[500px] overflow-auto'}`}>
+                        {renderContentPreview(type, content, lesson.title)}
                       </div>
                     </div>
                   </TabsContent>
