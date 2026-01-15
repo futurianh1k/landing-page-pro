@@ -5,7 +5,7 @@
  * 구형 (simple) 및 신형 (reveal.js) 형식 모두 지원
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -75,12 +75,12 @@ export const SlidePreview = ({ content, lessonTitle }: SlidePreviewProps) => {
   };
 
   // 키보드 이벤트 리스너
-  useState(() => {
+  useEffect(() => {
     if (fullscreen) {
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  });
+  }, [fullscreen]);
 
   const handleDownloadPPTX = () => {
     try {
